@@ -1,0 +1,18 @@
+# ESP-IDF build output
+/build/
+
+# Managed components (restored from dependencies.lock + main/idf_component.yml)
+/managed_components/
+
+# Generated config (sdkconfig.defaults is the source of truth)
+/sdkconfig
+/sdkconfig.old
+
+# Court data — keep only the small outcome summaries, not the raw IMU CSVs
+/Data/ses_*.csv
+/Data/**/hits.csv
+
+# Misc
+*.log
+*.bak
+.DS_Store

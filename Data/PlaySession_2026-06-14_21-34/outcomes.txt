@@ -1,0 +1,5 @@
+Good hit=21
+Out=9
+Unforced=12
+First serve=11
+Lost point=7
