@@ -61,6 +61,13 @@ PWR_BUTTON   = GPIO 10      (Home → Config; input+pull-up, active low)
 - **LVGL**: 9.5.0 via `espressif/esp_lvgl_port` v2.8.0
 - **Build/flash**: `idf.py -p COM9 flash`
 
+## Git / GitHub
+
+- **Repo**: https://github.com/giltal/ESP32-S3-Tennis-Monitoring-Wearable (branch `main`, HTTPS, creds in Windows Credential Manager).
+- **Auto-push**: commit AND push after every change set (user preference). Use `git -C "<project path>" ...` (project is at `C:\ESPIDFprojects\ESP32_S3_TennisMonitoringWearableDevice`).
+- **Not tracked** (`.gitignore`): `build/`, `managed_components/`, generated `sdkconfig`, raw IMU CSVs (`Data/ses_*.csv`, `Data/**/hits.csv`). Keep `sdkconfig.defaults`, `dependencies.lock`, `main/idf_component.yml`, and `Data/**/outcomes.txt`.
+- **Never commit secrets** — WiFi creds live only in `wifi.txt` on the SD card, never in the repo.
+
 ## Key Paths
 
 ```

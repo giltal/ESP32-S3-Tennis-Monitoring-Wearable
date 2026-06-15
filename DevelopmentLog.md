@@ -619,3 +619,7 @@ First court data in (`Data/PlaySession_2026-06-14_*`): 3 sessions, 94/97/344 det
 
 ### Current state
 - Firmware **v0.2**. File timestamps correct, Play uses 6 icon slices + total-hits in outcomes.
+
+### Published to GitHub
+- Repo: https://github.com/giltal/ESP32-S3-Tennis-Monitoring-Wearable (branch `main`). Added `.gitignore` (excludes build/managed_components/sdkconfig + raw IMU CSVs, keeps outcomes.txt) and `README.md`.
+- **Workflow going forward: auto commit + push after every change set** (user preference).
