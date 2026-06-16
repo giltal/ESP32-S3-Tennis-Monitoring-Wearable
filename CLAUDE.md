@@ -149,7 +149,7 @@ Reached from Home → PLAY. Reuses the hit detector + Test-mode HIT-logging unch
 - **Two modes** (toggled by HIT/ALL button, locked during recording):
   - **HIT mode (default)**: ring buffer holds last 3s (~1600 samples); on hit, flushes pre-hit buffer + captures 3s post-hit. Multiple hits merge windows. Massive space savings.
   - **ALL mode**: continuous full-rate logging of every sample
-- Files: `/sdcard/ses_001.csv`, `ses_002.csv`, etc.
+- Files: `/sdcard/ses_NNN_<mode>.csv` where `<mode>` = `full` (ALL/continuous) or `hit` (HIT-capture) — the mode is in the filename so you know at a glance which recordings are replay-able by `scripts/analyze_hits.py` (need `full`).
 - **Session counter persisted** in `/sdcard/ses_counter.txt` across reboots
 - CSV columns: `session,ms,gx,gy,gz,ax,ay,az,omega,alpha,clip,hit`
 - Gyro values ×10, accel values ×100, omega ×10 (one decimal), alpha /100

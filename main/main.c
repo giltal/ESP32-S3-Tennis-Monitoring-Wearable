@@ -63,7 +63,7 @@ static const char *TAG = "tennis_test";
 #define PLAY_INACT_MS          (30u * 60u * 1000u)  /* 30 min no-activity end */
 #define PLAY_BAT_CUTOFF        3      /* % → end session */
 
-#define FW_VERSION             "0.3"  /* firmware revision (shown on Config) */
+#define FW_VERSION             "0.4"  /* firmware revision (shown on Config) */
 #define FT3168_ADDR         0x38
 #define FT_REG_NUM_TOUCHES  0x02
 
@@ -717,8 +717,9 @@ static void start_logging(void)
     save_session_counter();
 
     char path[64];
-    snprintf(path, sizeof(path), "%s/ses_%03d.csv",
-             BSP_SD_MOUNT_POINT, log_session_num);
+    snprintf(path, sizeof(path), "%s/ses_%03d_%s.csv",
+             BSP_SD_MOUNT_POINT, log_session_num,
+             hit_only_mode ? "hit" : "full");   /* mode in the filename */
     log_file = fopen(path, "w");
     if (!log_file) {
         ESP_LOGE(TAG, "Cant open %s: %s", path, strerror(errno));
