@@ -647,3 +647,19 @@ New full-data court sessions (`ses_006`/`ses_007`, ALL/continuous) + 3 HIT-mode 
 - Lowering the **threshold** is the only lever: two of the three peak at 36.7k/38.9k (just under 40k) → α=35k catches them (60/61). The third (alpha 10.9k, omega 714) was the user gently handing the ball to the coach — not a real stroke — so 60/61 = all real strokes.
 - Validated α=35k vs 40k across all sessions: +0..+2 detections each → negligible false-positive cost.
 - **Change: `ALPHA_THRESH_INIT` 40000 → 35000, FW v0.3.**
+
+## Session 18 — 2026-06-16 — Play data analytics (first pass) + filename mode (v0.4)
+
+### v0.4
+- Test recordings now named `ses_NNN_full.csv` / `ses_NNN_hit.csv` (mode in filename → know which are replay-able).
+
+### Play analytics — `scripts/play_analysis.py` (exploratory, no labels yet)
+First pass on `PlaySession_2026-06-16` (746s, 161 raw hit=1):
+- **Multi-contact merge**: raw hit=1 events double-log across overlapping HIT-mode capture windows. Merging detections <300ms apart → **87 strokes, exactly matching the device `Total hits=87`**. Use merged strokes, not raw rows.
+- **Rallies** (gap>8s): 33 rallies, median 2 wearer-strokes/rally (≈2× total), max 7.
+- **Swing speed** (rotational proxy, ω→rad/s × R=0.7m): peak ω med 1429 / max 2639 dps → racket-head **med 63 / max 116 km/h** (plausible).
+- **Forehand/backhand**: unsupervised 2-means on the contact rotation axis → **52 vs 35 strokes, centroids nearly opposite (cos=-0.77)** = strong FH/BH signature. Needs a labeled swing set to assign which cluster is which.
+- **Spin**: rotation/linear ratio computed; needs labeled topspin/flat to calibrate.
+- **For scoring** (final-app target): firmware currently logs only *aggregate* outcome counts. Will need **per-tag timestamped outcome events** to reconstruct points/score.
+
+Target: `scripts/play_analysis.py` grows into a session-processing app (stats + score).
