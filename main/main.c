@@ -63,7 +63,7 @@ static const char *TAG = "tennis_test";
 #define PLAY_INACT_MS          (30u * 60u * 1000u)  /* 30 min no-activity end */
 #define PLAY_BAT_CUTOFF        3      /* % → end session */
 
-#define FW_VERSION             "0.2"  /* firmware revision (shown on Config) */
+#define FW_VERSION             "0.3"  /* firmware revision (shown on Config) */
 #define FT3168_ADDR         0x38
 #define FT_REG_NUM_TOUCHES  0x02
 
@@ -88,7 +88,7 @@ static const char *TAG = "tennis_test";
 /* Court-tuned from 5 recorded sessions: real hits 550-2600 dps, arm noise <500.
  * ω=500 α=40k cleanly separates hits from arm movements on court. */
 #define OMEGA_THRESH_INIT   500.0f
-#define ALPHA_THRESH_INIT   40000.0f
+#define ALPHA_THRESH_INIT   35000.0f   /* 40k→35k: catches smooth strokes (alpha ~37-39k), validated on court data */
 #define REFRACTORY_MS_INIT  250
 
 /* Threshold adjustment steps */

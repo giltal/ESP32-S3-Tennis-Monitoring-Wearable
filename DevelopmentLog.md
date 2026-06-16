@@ -640,3 +640,10 @@ New full-data court sessions (`ses_006`/`ses_007`, ALL/continuous) + 3 HIT-mode 
 
 ### Added
 - `scripts/analyze_hits.py` — reusable offline threshold-evaluation tool.
+
+### Follow-up — alpha threshold 40k → 35k (v0.3)
+- The 3 ses_006 misses are **not** omega/refractory/window — they're the **alpha gate**. Those strokes are smooth (omega ramps gradually), so alpha (Δω/dt) peaks at only ~10.9k / 36.7k / 38.9k, under the 40k gate.
+- Enlarging the alpha lookback window (20ms → 200ms) does **nothing** (58/61) — the window only extends arming *after* a crossing, and these never cross 40k.
+- Lowering the **threshold** is the only lever: two of the three peak at 36.7k/38.9k (just under 40k) → α=35k catches them (60/61). The third (alpha 10.9k, omega 714) was the user gently handing the ball to the coach — not a real stroke — so 60/61 = all real strokes.
+- Validated α=35k vs 40k across all sessions: +0..+2 detections each → negligible false-positive cost.
+- **Change: `ALPHA_THRESH_INIT` 40000 → 35000, FW v0.3.**
