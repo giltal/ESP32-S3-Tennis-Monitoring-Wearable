@@ -623,3 +623,20 @@ First court data in (`Data/PlaySession_2026-06-14_*`): 3 sessions, 94/97/344 det
 ### Published to GitHub
 - Repo: https://github.com/giltal/ESP32-S3-Tennis-Monitoring-Wearable (branch `main`). Added `.gitignore` (excludes build/managed_components/sdkconfig + raw IMU CSVs, keeps outcomes.txt) and `README.md`.
 - **Workflow going forward: auto commit + push after every change set** (user preference).
+
+## Session 17 — 2026-06-16 — Threshold validation from court data
+
+New full-data court sessions (`ses_006`/`ses_007`, ALL/continuous) + 3 HIT-mode sessions + a Play session. Goal: evaluate ω=500/α=40k.
+
+### Lesson — verify with an algorithm replay, not a proxy metric
+- First-pass script flagged dozens of "missed strong strokes" (omega 700–2600 undetected) → looked alarming. **It was a measurement bug**: it matched a hit to a peak only within ±60ms, but the detector **emits on the falling edge** (omega<wT), which for a hard stroke is 100–150ms *after* the peak. So real detections were mis-counted as misses.
+- Correct method: `scripts/analyze_hits.py` replays `hit_detector.c` exactly (reproduces the on-device hit counts 61/31 to the number).
+
+### Result — ω=500/α=40k is good
+- Replay: ses_006 caught **58/61** contacts (3 missed), ses_007 **30/30**. ~95–100%.
+- Raising wT hurts: ω=700 → ses_006 misses 13 real (softer) contacts; ω=800 → 19. 500 is the sweet spot (lower = arm noise, higher = drops soft shots).
+- Only real limits: a few contacts within the 250ms refractory get merged (the 3 ses_006 misses); ~12 soft 500–700 detections in ses_006 (likely real soft rallying).
+- **Decision: keep ω=500 / α=40k. No firmware change.**
+
+### Added
+- `scripts/analyze_hits.py` — reusable offline threshold-evaluation tool.

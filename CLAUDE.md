@@ -311,7 +311,9 @@ idf.py build
 | Environment | ω thresh | α thresh | Window | Notes |
 |-------------|----------|----------|--------|-------|
 | Floor bouncing (racquet) | 150 | 20,000 | 10 samp | 11/11 with lookback fix. Old same-sample check: 5/30 |
-| Court play (TBD) | TBD | TBD | TBD | User will tune on watch during play |
+| Court play | 500 | 40,000 | 10 samp | **Validated** — offline replay of 2026-06-16 full-data sessions: 58/61 and 30/30 contacts caught. Higher wT drops real soft contacts (ω=700 → −13 in one session). 500 is the sweet spot. |
+
+Offline analysis tool: `scripts/analyze_hits.py` faithfully replays `hit_detector.c` against recorded CSVs to evaluate thresholds (reproduces on-device hit counts exactly). Note the detector emits on the **falling** edge (omega<wT), so the CSV `hit=1` sample shows ~threshold omega, not the peak (peak is in the serial `HIT peak=` log).
 
 **Idle noise floor**: ω~8-35 dps, α~0-4k
 **Floor bounce peaks**: ω=140-430 dps, α=8-85k

@@ -1,0 +1,7 @@
+Good hit=11
+Out=11
+Bad hit=13
+Unforced error=1
+First serve in=0
+Lost point=1
+Total hits=87
