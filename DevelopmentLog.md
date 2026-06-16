@@ -663,3 +663,9 @@ First pass on `PlaySession_2026-06-16` (746s, 161 raw hit=1):
 - **For scoring** (final-app target): firmware currently logs only *aggregate* outcome counts. Will need **per-tag timestamped outcome events** to reconstruct points/score.
 
 Target: `scripts/play_analysis.py` grows into a session-processing app (stats + score).
+
+### Session report app — `scripts/session_report.py`
+- `python scripts/session_report.py <folder_or_csv> [out.html]` → self-contained **HTML report**: metric cards (strokes/rallies/avg/speed), forehand-vs-backhand split bar, strokes-per-rally + swing-speed histograms (inline SVG), per-rally breakdown table, and tagged outcomes. Works on both PlaySession folders and `ses_*_full.csv`. numpy-only (no matplotlib/sklewn).
+- Verified: Play 06-16 → 87 strokes / 33 rallies / 52 FH·35 BH / 63 km/h median; ses_006 → 61 strokes.
+- Generated `report.html` files are gitignored (outputs, not source).
+- Still heuristic: FH/BH label assignment (needs calibration session); speed is a rotational proxy (needs radar); scoring needs timestamped outcome events from firmware.

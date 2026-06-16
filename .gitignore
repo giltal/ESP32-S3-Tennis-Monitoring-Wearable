@@ -12,6 +12,11 @@
 /Data/ses_*.csv
 /Data/**/hits.csv
 
+# Generated analysis reports
+/Data/**/report.html
+/Data/*_report.html
+/Data/*.py
+
 # Misc
 *.log
 *.bak
