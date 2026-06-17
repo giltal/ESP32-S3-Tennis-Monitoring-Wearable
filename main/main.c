@@ -63,7 +63,7 @@ static const char *TAG = "tennis_test";
 #define PLAY_INACT_MS          (30u * 60u * 1000u)  /* 30 min no-activity end */
 #define PLAY_BAT_CUTOFF        3      /* % → end session */
 
-#define FW_VERSION             "0.4"  /* firmware revision (shown on Config) */
+#define FW_VERSION             "0.5"  /* firmware revision (shown on Config) */
 #define FT3168_ADDR         0x38
 #define FT_REG_NUM_TOUCHES  0x02
 
@@ -1033,6 +1033,7 @@ static void end_play_session(void)
                 for (int i = 0; i < PLAY_NUM_SLICES; i++)
                     fprintf(fb, "%s=%lu\n", play_names[i], (unsigned long)play_counts[i]);
                 fprintf(fb, "Total hits=%lu\n", (unsigned long)detector.hit_count);
+                fprintf(fb, "hand=%s\n", g_left_handed ? "left" : "right");
                 fflush(fb);
                 fclose(fb);
             }

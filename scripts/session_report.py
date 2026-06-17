@@ -17,7 +17,9 @@ import numpy as np
 
 # ── tunables ──────────────────────────────────────────────────────────────
 MERGE_MS  = 300     # detections closer than this = one stroke (multi-contact)
-RALLY_GAP = 8000    # gap > this (ms) starts a new rally
+# Inter-stroke gaps are bimodal: within-rally cycle ~2-4s, between-rally idle
+# 8-25s, with a clear valley at 4-8s. 6s sits in the valley → splits rallies.
+RALLY_GAP = 6000    # gap > this (ms) = "long idle" → new rally
 WIN_MS    = 250     # +/- window around a stroke for feature extraction
 RACKET_R  = 0.7     # m, wrist->sweet-spot radius for the speed proxy
 
@@ -40,9 +42,9 @@ def read_outcomes(folder):
     out={}
     for line in open(p):
         if '=' in line:
-            k,v=line.rsplit('=',1)
-            try: out[k.strip()]=int(v)
-            except ValueError: pass
+            k,v=line.rsplit('=',1); k=k.strip(); v=v.strip()
+            try: out[k]=int(v)
+            except ValueError: out[k]=v   # e.g. hand=left
     return out
 
 # ── stroke extraction ─────────────────────────────────────────────────────
@@ -89,12 +91,22 @@ def kmeans2(X, iters=60):
             if (lab==k).any(): c[k]=X[lab==k].mean(0)
     return lab, c
 
-def classify_fh_bh(strokes):
+# Reference rotation-axis sign for a FOREHAND on a RIGHT hand. Placeholder until
+# a labeled calibration session pins it; handedness then flips it for lefties.
+FH_REF_AXIS_RIGHT = np.array([-1.0, 1.0, 0.0])
+
+def classify_fh_bh(strokes, hand=None):
+    """Cluster strokes by contact rotation axis. If hand is known, name the
+    clusters by aligning to the (calibratable) forehand reference axis, flipped
+    for left-handers; otherwise fall back to the larger cluster = forehand."""
     axes=np.array([s['axis'] for s in strokes])
     lab,cent=kmeans2(axes)
-    # heuristic: the larger cluster = forehand (most players hit more FH)
-    big=0 if (lab==0).sum()>=(lab==1).sum() else 1
-    names={big:'Forehand', 1-big:'Backhand'}
+    if hand in ('right','left'):
+        ref=FH_REF_AXIS_RIGHT * (1 if hand=='right' else -1)
+        fh_cluster=int(np.argmax([np.dot(cent[k], ref) for k in range(2)]))
+    else:
+        fh_cluster=0 if (lab==0).sum()>=(lab==1).sum() else 1
+    names={fh_cluster:'Forehand', 1-fh_cluster:'Backhand'}
     for i,s in enumerate(strokes): s['type']=names[int(lab[i])]
     sep=float(np.dot(cent[0],cent[1])/(np.linalg.norm(cent[0])*np.linalg.norm(cent[1])+1e-9))
     return sep
@@ -179,7 +191,7 @@ def render(meta, strokes, rallies, sep, outcomes, out_path):
 <div class="sec"><h2>Forehand vs backhand <span style="font-weight:400;color:#aaa;font-size:12px">— unsupervised, cluster→label heuristic</span></h2>
  <div class="split"><div style="width:{fh_pct:.0f}%;background:#378ADD;display:flex;align-items:center;justify-content:center">Forehand · {fh}</div>
  <div style="width:{100-fh_pct:.0f}%;background:#EF9F27;display:flex;align-items:center;justify-content:center">Backhand · {bh}</div></div>
- <div class="note">Two rotation-axis clusters, centroid cos = {sep:+.2f} (−1 = opposite axes ⇒ likely FH vs BH). Label assignment is a heuristic until a calibration session is recorded.</div>
+ <div class="note">Two rotation-axis clusters, centroid cos = {sep:+.2f} (−1 = opposite axes ⇒ likely FH vs BH). Hand: {meta['hand']}. Cluster→label uses handedness when known, else the larger cluster; a calibration session finalizes it.</div>
 </div>
 
 <div class="two">
@@ -206,22 +218,29 @@ def resolve(arg):
     return csvp, folder, name
 
 def main():
-    if len(sys.argv)<2:
+    args=[x for x in sys.argv[1:]]
+    hand=None
+    for h in ('right','left'):
+        if '--hand='+h in args: hand=h; args.remove('--hand='+h)
+    if not args:
         print(__doc__); return
-    csvp, folder, name = resolve(sys.argv[1])
-    out = sys.argv[2] if len(sys.argv)>2 else os.path.join(folder,"report.html")
+    csvp, folder, name = resolve(args[0])
+    out = args[1] if len(args)>1 else os.path.join(folder,"report.html")
     t,g,a,om,hit = load_csv(csvp)
     strokes = extract_strokes(t,g,a,om,hit)
     if not strokes:
         print("No strokes found."); return
-    sep = classify_fh_bh(strokes)
-    rallies = detect_rallies(strokes)
     outcomes = read_outcomes(folder)
-    meta = dict(name=name, dur=(t[-1]-t[0])/1000, t0=int(t[0]))
+    if hand is None and outcomes and 'hand' in outcomes:   # firmware-recorded
+        hand = str(outcomes['hand'])
+    sep = classify_fh_bh(strokes, hand)
+    rallies = detect_rallies(strokes)
+    meta = dict(name=name, dur=(t[-1]-t[0])/1000, t0=int(t[0]),
+                hand=hand or "unknown")
     render(meta, strokes, rallies, sep, outcomes, out)
     fh=sum(1 for s in strokes if s['type']=='Forehand')
     print(f"{name}: {len(strokes)} strokes, {len(rallies)} rallies, "
-          f"{fh} FH / {len(strokes)-fh} BH, "
+          f"{fh} FH / {len(strokes)-fh} BH (hand={hand or 'unknown'}), "
           f"median {statistics.median([s['kmh'] for s in strokes]):.0f} km/h")
     print(f"Report -> {out}")
 

@@ -669,3 +669,20 @@ Target: `scripts/play_analysis.py` grows into a session-processing app (stats + 
 - Verified: Play 06-16 → 87 strokes / 33 rallies / 52 FH·35 BH / 63 km/h median; ses_006 → 61 strokes.
 - Generated `report.html` files are gitignored (outputs, not source).
 - Still heuristic: FH/BH label assignment (needs calibration session); speed is a rotational proxy (needs radar); scoring needs timestamped outcome events from firmware.
+
+## Session 19 — 2026-06-16 — Analytics: rally model, handedness, spin research (v0.5)
+
+### Rally model (data-driven)
+- Inter-stroke gap distribution is **bimodal**: within-rally cycle 2–4s (46 gaps), between-rally idle 8–25s (32 gaps), clear **valley at 4–8s**. → `RALLY_GAP` 8s→**6s** (sits in the valley). Confirms user's model: rally = strokes at a regular cycle bounded by long idles; outcome tags land at rally ends (linking needs timestamped events — future).
+
+### Handedness for FH/BH
+- Firmware now records `hand=left|right` in `outcomes.txt` (from `g_left_handed`), FW v0.5.
+- `session_report.py`: reads `hand` from outcomes (or `--hand=right|left`); `classify_fh_bh()` aligns clusters to a forehand reference axis flipped by handedness (deterministic flip verified: right→52FH/35BH, left→35/52). The reference axis (`FH_REF_AXIS_RIGHT`) is a placeholder until a labeled calibration session pins it — handedness then generalizes it to all players.
+
+### Spin research (web)
+- IMU literature: accelerometer→stroke detection, **gyroscope (angular velocity)→stroke/spin classification** (~93% with ML). Biomechanics: **topspin = low→high brush** (tip below→above, face closed), **slice = high→low** (tip above→below, face open), **flat = straight/neutral**. Wrist-sensor mapping: net rotation direction about the horizontal brush axis (gyro integral through contact) + wrist tilt at contact (accel gravity vector → face angle).
+- Spin (and final FH/BH naming) is a **supervised** problem → needs a short **calibration session** (e.g. 10 topspin / 10 slice / 10 flat, and 10 FH / 10 BH labeled). Then thresholds/boundaries can be set and validated.
+
+### Files changed
+- `main/main.c` (hand in outcomes, v0.5); `scripts/session_report.py` (rally 6s, handedness-aware FH/BH)
+- Sources: ambientintelligence.aalto.fi tennis IMU paper; topspinpro.com / eliteclubs.com swing-path biomechanics
