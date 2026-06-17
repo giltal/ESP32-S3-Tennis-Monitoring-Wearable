@@ -1,0 +1,22 @@
+<svg viewBox="0 0 470 560" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="470" height="560" rx="40" fill="#111114"/>
+  <rect x="30" y="29" width="410" height="502" rx="34" fill="#000000" stroke="#2a2a30" stroke-width="1"/>
+  <g transform="translate(30,29)">
+    <text x="205" y="48" fill="#00c8ff" font-size="34" font-weight="bold" text-anchor="middle">Settings</text>
+    <text x="350" y="44" fill="#8c8c8c" font-size="20" text-anchor="end">v0.6</text>
+    <!-- handedness -->
+    <text x="20" y="118" fill="#b4b4b4" font-size="26">Player hand:</text>
+    <rect x="20" y="135" width="175" height="64" rx="10" fill="#0096c8"/>
+    <text x="107" y="177" fill="#fff" font-size="28" text-anchor="middle">RIGHT</text>
+    <rect x="215" y="135" width="175" height="64" rx="10" fill="#2d2d37"/>
+    <text x="302" y="177" fill="#fff" font-size="28" text-anchor="middle">LEFT</text>
+    <!-- NTP sync -->
+    <rect x="20" y="235" width="370" height="80" rx="10" fill="#1e5aaa"/>
+    <text x="205" y="284" fill="#fff" font-size="26" text-anchor="middle">&#8635;  Sync Clock (NTP)</text>
+    <!-- live date/time -->
+    <text x="205" y="392" fill="#00c8ff" font-size="24" text-anchor="middle">2026-06-16</text>
+    <text x="205" y="420" fill="#00c8ff" font-size="24" text-anchor="middle">14:32:31</text>
+    <!-- hint -->
+    <text x="205" y="486" fill="#6e6e6e" font-size="22" text-anchor="middle">&#8592;  BOOT = back</text>
+  </g>
+</svg>

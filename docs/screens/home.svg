@@ -1,0 +1,21 @@
+<svg viewBox="0 0 470 560" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="470" height="560" rx="40" fill="#111114"/>
+  <rect x="30" y="29" width="410" height="502" rx="34" fill="#000000" stroke="#2a2a30" stroke-width="1"/>
+  <g transform="translate(30,29)">
+    <!-- battery -->
+    <rect x="150" y="14" width="34" height="16" rx="3" fill="none" stroke="#00c864" stroke-width="2"/>
+    <rect x="184" y="18" width="3" height="8" fill="#00c864"/>
+    <rect x="152" y="16" width="26" height="12" fill="#00c864"/>
+    <text x="196" y="27" fill="#00c864" font-size="18">82%</text>
+    <!-- PLAY -->
+    <rect x="20" y="55" width="370" height="165" rx="12" fill="#1d9e55"/>
+    <path d="M120 120 L120 156 L152 138 Z" fill="#eafff0"/>
+    <text x="170" y="150" fill="#ffffff" font-size="40" font-weight="bold">PLAY</text>
+    <!-- clock -->
+    <text x="205" y="266" fill="#ffffff" font-size="52" font-weight="bold" text-anchor="middle">14:32</text>
+    <!-- TEST -->
+    <rect x="20" y="295" width="370" height="165" rx="12" fill="#2d6ad8"/>
+    <circle cx="138" cy="378" r="17" fill="none" stroke="#eaf1ff" stroke-width="5"/>
+    <text x="172" y="392" fill="#ffffff" font-size="40" font-weight="bold">TEST</text>
+  </g>
+</svg>

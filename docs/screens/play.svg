@@ -1,0 +1,33 @@
+<svg viewBox="0 0 470 560" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="470" height="560" rx="40" fill="#111114"/>
+  <rect x="30" y="29" width="410" height="502" rx="34" fill="#000000" stroke="#2a2a30" stroke-width="1"/>
+  <g transform="translate(30,29)">
+    <!-- top info row -->
+    <text x="46" y="30" fill="#00c864" font-size="20">82%</text>
+    <text x="205" y="30" fill="#00c8ff" font-size="22" text-anchor="middle">Hits 5</text>
+    <text x="360" y="30" fill="#bebebe" font-size="20" text-anchor="end">14:32</text>
+    <!-- 6 ring segments (stroke-based donut), center 205,251 r~134 width108 -->
+    <g fill="none" stroke-width="108">
+      <path d="M144.2 131.6 A134 134 0 0 1 265.8 131.6" stroke="#1d9e55"/>
+      <path d="M278.0 138.6 A134 134 0 0 1 338.8 244.0" stroke="#e1c814"/>
+      <path d="M338.8 258.0 A134 134 0 0 1 278.0 363.4" stroke="#eb7814"/>
+      <path d="M265.8 370.4 A134 134 0 0 1 144.2 370.4" stroke="#c82d2d"/>
+      <path d="M132.0 363.4 A134 134 0 0 1 71.2 258.0" stroke="#2d6ad8"/>
+      <path d="M71.2 244.0 A134 134 0 0 1 132.0 138.6" stroke="#e1e1e1"/>
+    </g>
+    <!-- slice icons -->
+    <g font-size="34" text-anchor="middle" fill="#ffffff">
+      <text x="205" y="138">&#10003;</text>
+      <text x="313" y="200">&#8593;</text>
+      <text x="313" y="325">&#9888;</text>
+      <text x="205" y="388">&#10007;</text>
+      <text x="97"  y="325">&#9654;</text>
+      <text x="97"  y="200" fill="#222222">&#9660;</text>
+    </g>
+    <!-- center dial -->
+    <circle cx="205" cy="251" r="74" fill="#161616" stroke="#444" stroke-width="2"/>
+    <text x="205" y="262" fill="#bebebe" font-size="30" font-weight="bold" text-anchor="middle">PAUSE</text>
+    <!-- hint -->
+    <text x="205" y="486" fill="#6e6e6e" font-size="18" text-anchor="middle">BOOT = back    PWR = play/pause</text>
+  </g>
+</svg>

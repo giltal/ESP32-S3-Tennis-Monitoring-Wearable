@@ -1,0 +1,34 @@
+<svg viewBox="0 0 470 560" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="470" height="560" rx="40" fill="#111114"/>
+  <rect x="30" y="29" width="410" height="502" rx="34" fill="#000000" stroke="#2a2a30" stroke-width="1"/>
+  <g transform="translate(30,29)">
+    <!-- clock + session (top right) -->
+    <text x="350" y="30" fill="#bebebe" font-size="20" text-anchor="end">14:32  85%</text>
+    <text x="350" y="58" fill="#00c8ff" font-size="22" text-anchor="end">#006</text>
+    <!-- hit counter + state -->
+    <text x="175" y="170" fill="#ffffff" font-size="60" font-weight="bold" text-anchor="end">12</text>
+    <text x="200" y="160" fill="#ff3232" font-size="34" font-weight="bold">HIT!</text>
+    <!-- omega control -->
+    <rect x="10" y="200" width="84" height="62" rx="10" fill="#28324f"/>
+    <text x="52" y="242" fill="#fff" font-size="34" text-anchor="middle">&#8722;</text>
+    <text x="205" y="234" fill="#00ff80" font-size="30" text-anchor="middle">wT 500</text>
+    <rect x="316" y="200" width="84" height="62" rx="10" fill="#28324f"/>
+    <text x="358" y="242" fill="#fff" font-size="34" text-anchor="middle">+</text>
+    <!-- alpha control -->
+    <rect x="10" y="272" width="84" height="62" rx="10" fill="#28324f"/>
+    <text x="52" y="314" fill="#fff" font-size="34" text-anchor="middle">&#8722;</text>
+    <text x="205" y="306" fill="#00ff80" font-size="30" text-anchor="middle">aT 35k</text>
+    <rect x="316" y="272" width="84" height="62" rx="10" fill="#28324f"/>
+    <text x="358" y="314" fill="#fff" font-size="34" text-anchor="middle">+</text>
+    <!-- reset -->
+    <rect x="10" y="344" width="390" height="50" rx="10" fill="#1e50a0"/>
+    <text x="205" y="377" fill="#fff" font-size="26" text-anchor="middle">RESET</text>
+    <!-- HIT + REC -->
+    <rect x="10" y="404" width="120" height="66" rx="10" fill="#c88c00"/>
+    <text x="70" y="446" fill="#3a2900" font-size="26" text-anchor="middle">HIT</text>
+    <rect x="140" y="404" width="260" height="66" rx="10" fill="#c81e1e"/>
+    <text x="270" y="447" fill="#fff" font-size="30" text-anchor="middle">REC</text>
+    <!-- status -->
+    <text x="205" y="492" fill="#7a7a7a" font-size="22" text-anchor="middle">500Hz</text>
+  </g>
+</svg>
