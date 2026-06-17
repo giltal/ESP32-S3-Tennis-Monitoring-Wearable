@@ -686,3 +686,17 @@ Target: `scripts/play_analysis.py` grows into a session-processing app (stats + 
 ### Files changed
 - `main/main.c` (hand in outcomes, v0.5); `scripts/session_report.py` (rally 6s, handedness-aware FH/BH)
 - Sources: ambientintelligence.aalto.fi tennis IMU paper; topspinpro.com / eliteclubs.com swing-path biomechanics
+
+## Session 20 — 2026-06-16 — Calibration tool + timestamped events (v0.6)
+
+### Firmware — events.csv (v0.6)
+- Play mode now writes `<play_dir>/events.csv` (`ms,outcome`): each tagged outcome with its timestamp (opened in `play_open_files`, appended on each slice tap during PLAY, closed in `end_play_session`). Enables reconstructing points/score and linking outcomes → rallies.
+
+### Calibration tool — `scripts/calibrate.py`
+- Fits the **forehand reference axis** and **spin (topspin/flat/slice) boundaries** from a *labeled* recording. Record a Test `full` session in clean blocks with pauses, then: `python calibrate.py <csv> --hand right --blocks "fh:flat:10,bh:flat:10,fh:topspin:10,fh:slice:10,bh:slice:10"`. Splits at the largest gaps → labels by order → writes `scripts/calib.json` (fh_ref_axis, spin_axis, thresholds) + reports FH/BH label agreement and spin accuracy.
+- Spin discriminant = direction of (mean topspin net-rotation − mean slice net-rotation); thresholds at class-mean midpoints. Net rotation = gyro integral over the swing (encodes low→high vs high→low brush).
+
+### Report integration — `scripts/session_report.py`
+- Loads `calib.json` if present → calibrated FH/BH (ref flipped by handedness) + per-stroke **spin** classification (new Spin section).
+- Reads `events.csv` → links each tag to its rally (new Outcome column in the rally table) + a provisional **Points won/lost** score (mapping documented, user-adjustable).
+- Pipeline validated end-to-end (graceful when calib/events absent).

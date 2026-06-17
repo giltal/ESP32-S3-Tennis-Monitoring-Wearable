@@ -12,10 +12,11 @@
 /Data/ses_*.csv
 /Data/**/hits.csv
 
-# Generated analysis reports
+# Generated analysis reports / calibration
 /Data/**/report.html
 /Data/*_report.html
 /Data/*.py
+/scripts/calib.json
 
 # Misc
 *.log

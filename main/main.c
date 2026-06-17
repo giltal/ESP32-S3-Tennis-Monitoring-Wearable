@@ -63,7 +63,7 @@ static const char *TAG = "tennis_test";
 #define PLAY_INACT_MS          (30u * 60u * 1000u)  /* 30 min no-activity end */
 #define PLAY_BAT_CUTOFF        3      /* % → end session */
 
-#define FW_VERSION             "0.5"  /* firmware revision (shown on Config) */
+#define FW_VERSION             "0.6"  /* firmware revision (shown on Config) */
 #define FT3168_ADDR         0x38
 #define FT_REG_NUM_TOUCHES  0x02
 
@@ -195,6 +195,7 @@ static bool      play_session_active = false;
 static bool      play_session_ended  = false;    /* end_play_session() guard */
 static bool      play_files_open     = false;    /* folder+hits.csv created (first PLAY) */
 static char      play_dir[80];                   /* /sdcard/PlaySession_... */
+static FILE     *play_events = NULL;             /* timestamped outcome tags (events.csv) */
 static volatile uint32_t play_last_activity_ms = 0;  /* hit / tap / PWR */
 /* Slice order clockwise from the top (used in outcomes.txt) */
 static const char *play_names[PLAY_NUM_SLICES] = {
@@ -975,6 +976,7 @@ static void start_play_session(void)
     play_files_open = false;
     play_dir[0] = '\0';
     log_file = NULL;
+    play_events = NULL;
     logging_active = false;
     hit_only_mode = true;          /* HIT-mode capture (same as Test recording) */
     hit_detector_reset(&detector);
@@ -1008,6 +1010,12 @@ static void play_open_files(void)
     log_sample_count = 0;
     capture_active = false;
     capture_deadline_ms = 0;
+
+    /* events.csv — each tagged outcome with its timestamp (for scoring) */
+    snprintf(path, sizeof(path), "%s/events.csv", play_dir);
+    play_events = fopen(path, "w");
+    if (play_events) { fprintf(play_events, "ms,outcome\n"); fflush(play_events); }
+
     play_files_open = true;
     ESP_LOGI(TAG, "Play files opened → %s", play_dir);
 }
@@ -1040,6 +1048,7 @@ static void end_play_session(void)
         }
         /* File A — flush + close cleanly */
         if (log_file) { fflush(log_file); fclose(log_file); log_file = NULL; }
+        if (play_events) { fflush(play_events); fclose(play_events); play_events = NULL; }
         ESP_LOGI(TAG, "Play session saved → %s", play_dir);
     }
     play_files_open = false;
@@ -1389,6 +1398,12 @@ static void touch_poll_cb(lv_timer_t *timer)
                 if (play_state == PLAY_RUNNING) {        /* count only while PLAY */
                     play_counts[sl]++;
                     play_set_slice_label(sl);
+                    if (play_events) {                   /* timestamped tag → scoring */
+                        fprintf(play_events, "%lu,%s\n",
+                                (unsigned long)(esp_timer_get_time() / 1000),
+                                play_names[sl]);
+                        fflush(play_events);
+                    }
                 }
             }
             break;

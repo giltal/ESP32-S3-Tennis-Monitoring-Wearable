@@ -12,7 +12,7 @@ Usage:
 Exploratory: forehand/backhand is unsupervised (cluster->label is a heuristic
 until a labeled calibration session exists); speed is a rotational proxy.
 """
-import csv, sys, os, math, statistics, html
+import csv, sys, os, math, statistics, html, json
 import numpy as np
 
 # ── tunables ──────────────────────────────────────────────────────────────
@@ -47,6 +47,25 @@ def read_outcomes(folder):
             except ValueError: out[k]=v   # e.g. hand=left
     return out
 
+def read_events(folder):
+    """events.csv (ms,outcome): timestamped outcome tags (firmware v0.6+)."""
+    p=os.path.join(folder,"events.csv")
+    if not os.path.isfile(p): return []
+    ev=[]
+    for r in csv.reader(open(p)):
+        if not r or r[0]=='ms' or len(r)<2: continue
+        try: ev.append((int(r[0]), r[1].strip()))
+        except ValueError: pass
+    return ev
+
+def load_calib():
+    p=os.path.join(os.path.dirname(os.path.abspath(__file__)),"calib.json")
+    return json.load(open(p)) if os.path.isfile(p) else None
+
+# Points the wearer won vs lost (provisional mapping — adjust to your rules)
+OUTCOME_SIGN={'Good hit':+1,'First serve in':0,'Out':-1,'Bad hit':-1,
+              'Unforced error':-1,'Lost point':-1}
+
 # ── stroke extraction ─────────────────────────────────────────────────────
 def extract_strokes(t, g, a, om, hit):
     idx=np.where(hit)[0]
@@ -63,10 +82,16 @@ def extract_strokes(t, g, a, om, hit):
         accmag=np.linalg.norm(a[lo2:hi2],axis=1)
         gv=g[pk]; n=np.linalg.norm(gv)
         peak_om=float(om[pk])
+        # net rotation through the swing (gyro integral, deg) — encodes the
+        # low->high (topspin) vs high->low (slice) brush direction.
+        dts=np.diff(t[lo2:hi2])/1000.0 if hi2-lo2>1 else np.array([])
+        rot=(g[lo2:hi2-1]*dts[:,None]).sum(0) if len(dts) else np.zeros(3)
+        grav=a[lo2:hi2].mean(0); gn=np.linalg.norm(grav)
         strokes.append(dict(
             ms=int(t[pk]), peak_om=peak_om,
             peak_acc=float(accmag.max()) if len(accmag) else 0.0,
             axis=(gv/n if n>0 else gv),
+            rot=rot, grav=(grav/gn if gn>0 else grav),
             kmh=math.radians(peak_om)*RACKET_R*3.6,
             dur_ms=int(np.sum(om[lo2:hi2]>0.4*peak_om)*2),
         ))
@@ -95,14 +120,20 @@ def kmeans2(X, iters=60):
 # a labeled calibration session pins it; handedness then flips it for lefties.
 FH_REF_AXIS_RIGHT = np.array([-1.0, 1.0, 0.0])
 
-def classify_fh_bh(strokes, hand=None):
-    """Cluster strokes by contact rotation axis. If hand is known, name the
-    clusters by aligning to the (calibratable) forehand reference axis, flipped
-    for left-handers; otherwise fall back to the larger cluster = forehand."""
+def classify_fh_bh(strokes, hand=None, calib=None):
+    """Cluster strokes by contact rotation axis, then name the clusters using
+    (in priority): a calibrated forehand reference axis (flipped if the session
+    hand differs from the calibrated hand) → handedness + placeholder axis →
+    larger cluster = forehand."""
     axes=np.array([s['axis'] for s in strokes])
     lab,cent=kmeans2(axes)
-    if hand in ('right','left'):
+    ref=None
+    if calib and 'fh_ref_axis' in calib:
+        ref=np.array(calib['fh_ref_axis'],dtype=float)
+        if hand and calib.get('hand') and hand!=calib['hand']: ref=-ref
+    elif hand in ('right','left'):
         ref=FH_REF_AXIS_RIGHT * (1 if hand=='right' else -1)
+    if ref is not None:
         fh_cluster=int(np.argmax([np.dot(cent[k], ref) for k in range(2)]))
     else:
         fh_cluster=0 if (lab==0).sum()>=(lab==1).sum() else 1
@@ -110,6 +141,17 @@ def classify_fh_bh(strokes, hand=None):
     for i,s in enumerate(strokes): s['type']=names[int(lab[i])]
     sep=float(np.dot(cent[0],cent[1])/(np.linalg.norm(cent[0])*np.linalg.norm(cent[1])+1e-9))
     return sep
+
+def classify_spin(strokes, calib):
+    """Per-stroke topspin/flat/slice from the calibrated spin axis+thresholds."""
+    if not calib or 'spin_axis' not in calib:
+        for s in strokes: s['spin']=None
+        return False
+    ax=np.array(calib['spin_axis'],dtype=float); hi=calib['spin_thr_hi']; lo=calib['spin_thr_lo']
+    for s in strokes:
+        v=float(np.dot(s['rot'],ax))
+        s['spin']='topspin' if v>hi else ('slice' if v<lo else 'flat')
+    return True
 
 # ── HTML ───────────────────────────────────────────────────────────────────
 def mmss(ms): return f"{ms//60000:d}:{(ms//1000)%60:02d}"
@@ -125,7 +167,9 @@ def bar_chart(pairs, w=320, h=150, color="#378ADD"):
         bars+=f'<text x="{x+bw/2:.0f}" y="{y-4:.0f}" font-size="10" fill="#222" text-anchor="middle">{v}</text>'
     return f'<svg viewBox="0 0 {w} {h}" width="100%">{bars}</svg>'
 
-def render(meta, strokes, rallies, sep, outcomes, out_path):
+def render(meta, strokes, rallies, sep, outcomes, out_path,
+           has_spin=False, events=None, rally_tag=None):
+    events = events or []; rally_tag = rally_tag or [None]*len(rallies)
     rl=[len(r) for r in rallies]
     kmh=[s['kmh'] for s in strokes]; oms=[s['peak_om'] for s in strokes]
     fh=sum(1 for s in strokes if s['type']=='Forehand'); bh=len(strokes)-fh
@@ -150,8 +194,31 @@ def render(meta, strokes, rallies, sep, outcomes, out_path):
         dur=(r[-1]['ms']-r[0]['ms'])/1000
         pk=max(s['kmh'] for s in r)
         t0=mmss(r[0]['ms']-meta['t0'])
+        tag=rally_tag[i-1] if i-1<len(rally_tag) else None
         rally_rows+=(f"<tr><td>{i}</td><td>{t0}</td><td>{len(r)}</td>"
-                     f"<td>{dur:.1f}s</td><td>{fhc} FH / {len(r)-fhc} BH</td><td>{pk:.0f} km/h</td></tr>")
+                     f"<td>{dur:.1f}s</td><td>{fhc} FH / {len(r)-fhc} BH</td><td>{pk:.0f} km/h</td>"
+                     f"<td>{html.escape(tag) if tag else '—'}</td></tr>")
+
+    # spin breakdown (only when calibrated)
+    spin_html=""
+    if has_spin:
+        sc={k:sum(1 for s in strokes if s['spin']==k) for k in ('topspin','flat','slice')}
+        tot=sum(sc.values()) or 1
+        spin_html=("<div class='sec'><h2>Spin</h2><div class='split'>"
+            f"<div style='width:{100*sc['topspin']/tot:.0f}%;background:#1D9E75'>Topspin · {sc['topspin']}</div>"
+            f"<div style='width:{100*sc['flat']/tot:.0f}%;background:#888'>Flat · {sc['flat']}</div>"
+            f"<div style='width:{100*sc['slice']/tot:.0f}%;background:#BA7517'>Slice · {sc['slice']}</div></div>"
+            "<div class='note'>Calibrated from a labeled session.</div></div>")
+
+    # score summary from tagged events
+    score_html=""
+    if events:
+        won=sum(1 for _,oc in events if OUTCOME_SIGN.get(oc,0)>0)
+        lost=sum(1 for _,oc in events if OUTCOME_SIGN.get(oc,0)<0)
+        score_html=("<div class='sec'><h2>Points (from tagged events)</h2>"
+            f"<div style='font-size:22px;font-weight:600'>{won} won · {lost} lost"
+            f"<span style='font-size:13px;color:#999;font-weight:400'> of {len(events)} tagged</span></div>"
+            "<div class='note'>Provisional mapping (Good hit/First serve = won; Out/Bad/Unforced/Lost = lost) — adjust to your scoring rules.</div></div>")
 
     out_rows=""
     if outcomes:
@@ -191,8 +258,11 @@ def render(meta, strokes, rallies, sep, outcomes, out_path):
 <div class="sec"><h2>Forehand vs backhand <span style="font-weight:400;color:#aaa;font-size:12px">— unsupervised, cluster→label heuristic</span></h2>
  <div class="split"><div style="width:{fh_pct:.0f}%;background:#378ADD;display:flex;align-items:center;justify-content:center">Forehand · {fh}</div>
  <div style="width:{100-fh_pct:.0f}%;background:#EF9F27;display:flex;align-items:center;justify-content:center">Backhand · {bh}</div></div>
- <div class="note">Two rotation-axis clusters, centroid cos = {sep:+.2f} (−1 = opposite axes ⇒ likely FH vs BH). Hand: {meta['hand']}. Cluster→label uses handedness when known, else the larger cluster; a calibration session finalizes it.</div>
+ <div class="note">Two rotation-axis clusters, centroid cos = {sep:+.2f} (−1 = opposite axes ⇒ likely FH vs BH). Hand: {meta['hand']}{" · calibrated" if meta.get('calibrated') else ""}. Cluster→label uses the calibrated reference when present, else handedness / larger cluster.</div>
 </div>
+
+{spin_html}
+{score_html}
 
 <div class="two">
  <div class="sec"><h2>Strokes per rally</h2>{bar_chart(rhist)}<div class="note">Wearer's strokes only (full rally ≈ 2×).</div></div>
@@ -200,7 +270,7 @@ def render(meta, strokes, rallies, sep, outcomes, out_path):
 </div>
 
 <div class="sec"><h2>Rally breakdown</h2>
- <table><tr><th>#</th><th>Start</th><th>Strokes</th><th>Duration</th><th>Types</th><th>Peak</th></tr>{rally_rows}</table>
+ <table><tr><th>#</th><th>Start</th><th>Strokes</th><th>Duration</th><th>Types</th><th>Peak</th><th>Outcome</th></tr>{rally_rows}</table>
 </div>
 
 {"<div class='sec'><h2>Tagged outcomes</h2><table>"+out_rows+"</table></div>" if out_rows else ""}
@@ -233,15 +303,33 @@ def main():
     outcomes = read_outcomes(folder)
     if hand is None and outcomes and 'hand' in outcomes:   # firmware-recorded
         hand = str(outcomes['hand'])
-    sep = classify_fh_bh(strokes, hand)
+    calib = load_calib()
+    sep = classify_fh_bh(strokes, hand, calib)
+    has_spin = classify_spin(strokes, calib)
     rallies = detect_rallies(strokes)
+
+    # link timestamped outcome tags (events.csv) to the rally they end
+    events = read_events(folder)
+    rally_tag=[None]*len(rallies)
+    for ev_ms, oc in events:
+        # the rally whose last stroke is closest before the tag
+        best=None
+        for i,r in enumerate(rallies):
+            if r[0]['ms']-1000 <= ev_ms:
+                best=i
+        if best is not None: rally_tag[best]=oc
+
     meta = dict(name=name, dur=(t[-1]-t[0])/1000, t0=int(t[0]),
-                hand=hand or "unknown")
-    render(meta, strokes, rallies, sep, outcomes, out)
+                hand=hand or "unknown", calibrated=bool(calib))
+    render(meta, strokes, rallies, sep, outcomes, out,
+           has_spin=has_spin, events=events, rally_tag=rally_tag)
     fh=sum(1 for s in strokes if s['type']=='Forehand')
+    sp = (" spin: "+", ".join(f"{k} {sum(1 for s in strokes if s['spin']==k)}"
+          for k in ('topspin','flat','slice'))) if has_spin else " spin: (no calib)"
     print(f"{name}: {len(strokes)} strokes, {len(rallies)} rallies, "
           f"{fh} FH / {len(strokes)-fh} BH (hand={hand or 'unknown'}), "
-          f"median {statistics.median([s['kmh'] for s in strokes]):.0f} km/h")
+          f"median {statistics.median([s['kmh'] for s in strokes]):.0f} km/h.{sp}")
+    if events: print(f"  {len(events)} tagged events linked to rallies")
     print(f"Report -> {out}")
 
 if __name__=="__main__":
