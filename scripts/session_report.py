@@ -236,7 +236,7 @@ def render(meta, strokes, rallies, sep, outcomes, out_path,
 
     out_rows=""
     if outcomes:
-        total=sum(outcomes.values())
+        total=sum(v for v in outcomes.values() if isinstance(v,int))
         for k in ["Good hit","Out","Bad hit","Unforced error","First serve in","Lost point","Total hits"]:
             if k in outcomes:
                 out_rows+=f"<tr><td>{html.escape(k)}</td><td style='text-align:right'>{outcomes[k]}</td></tr>"
