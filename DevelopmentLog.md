@@ -700,3 +700,21 @@ Target: `scripts/play_analysis.py` grows into a session-processing app (stats + 
 - Loads `calib.json` if present → calibrated FH/BH (ref flipped by handedness) + per-stroke **spin** classification (new Spin section).
 - Reads `events.csv` → links each tag to its rally (new Outcome column in the rally table) + a provisional **Points won/lost** score (mapping documented, user-adjustable).
 - Pipeline validated end-to-end (graceful when calib/events absent).
+
+## Session 21 — 2026-06-18 — First real calibration (FH/BH 100%, spin 89%)
+
+Labeled sessions today: 11 warmup, **12 FH topspin**, **13 FH flat**, **14 backhand**, 15 baseline practice (all `ses_NNN_full` except 15 `_hit`).
+
+### calibrate.py — multi-file labeled mode
+- Added per-stroke-type file groups (cleaner than blocks-in-one-file): `--fh a,b --bh c --topspin a --flat b [--slice d]`. Resolves paths against `Data/`. Keeps the `--blocks` single-file mode.
+
+### Results
+- **Forehand/backhand: 100% (40/40)**, fh_ref centroid cos −0.87. Classifier locked. ✓
+- **Spin (topspin vs flat): 89% LOO.** Investigated features: **peak linear accel is the discriminator** (flat = direct/high accel, topspin = brushy/low; d-prime 1.47, 89%); net-rotation was weak (≤70%). Rebuilt spin as a standardized feature vector `[peak_acc, peak_acc/peak_om, rot_unit(3)]` with **squared-Fisher dim weights + weak-dim dropping** → calibrator auto-picks peak_acc (weights [2.17, 0.88, 0,0,0]). Nearest weighted class-mean classify; generalizes to slice when a slice block is added.
+
+### Session 15 (baseline practice) with calibration
+- 114 strokes, 18 rallies (up to **16** strokes — real baseline rallies vs the choppy match session), **57 FH / 57 BH** balanced, 72–76 km/h.
+- **Caveat: spin was forehand-only calibration** → backhand spin is extrapolated (BH 49 topspin/8 flat is unreliable). Need backhand topspin + flat blocks to calibrate BH spin.
+
+### Files changed
+- `scripts/calibrate.py` (multi-file mode, Fisher-weighted spin), `scripts/session_report.py` (`spin_feature`, weighted nearest-mean `classify_spin`). `calib.json` gitignored (user-specific).

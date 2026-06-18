@@ -142,15 +142,29 @@ def classify_fh_bh(strokes, hand=None, calib=None):
     sep=float(np.dot(cent[0],cent[1])/(np.linalg.norm(cent[0])*np.linalg.norm(cent[1])+1e-9))
     return sep
 
+def spin_feature(s):
+    """Per-stroke spin feature vector (calibration Fisher-weights the dims):
+      [0] peak linear accel — flat hits are more direct (high accel), topspin/
+          slice brush the ball (low). Strongest discriminator in testing.
+      [1] accel/omega — the power-normalized form (more robust across efforts).
+      [2:5] net-rotation unit vector — brush direction (up=topspin vs down=
+          slice); needed to tell topspin from slice."""
+    rot=np.array(s['rot'],dtype=float); rmag=np.linalg.norm(rot)+1e-9
+    return np.array([s['peak_acc'], s['peak_acc']/(s['peak_om']+1e-9),
+                     rot[0]/rmag, rot[1]/rmag, rot[2]/rmag])
+
 def classify_spin(strokes, calib):
-    """Per-stroke topspin/flat/slice from the calibrated spin axis+thresholds."""
-    if not calib or 'spin_axis' not in calib:
+    """Nearest calibrated class-mean in standardized spin-feature space.
+    Classes = whatever was calibrated (topspin+flat, or +slice)."""
+    if not calib or 'spin_feat_mean' not in calib:
         for s in strokes: s['spin']=None
         return False
-    ax=np.array(calib['spin_axis'],dtype=float); hi=calib['spin_thr_hi']; lo=calib['spin_thr_lo']
+    mu=np.array(calib['spin_feat_mean']); sd=np.array(calib['spin_feat_std'])
+    w=np.array(calib.get('spin_feat_weight',np.ones(len(mu))))
+    cv={c:np.array(v) for c,v in calib['spin_class_vec'].items()}
     for s in strokes:
-        v=float(np.dot(s['rot'],ax))
-        s['spin']='topspin' if v>hi else ('slice' if v<lo else 'flat')
+        z=(spin_feature(s)-mu)/sd
+        s['spin']=min(cv, key=lambda c: np.linalg.norm(w*(z-cv[c])))
     return True
 
 # ── HTML ───────────────────────────────────────────────────────────────────
