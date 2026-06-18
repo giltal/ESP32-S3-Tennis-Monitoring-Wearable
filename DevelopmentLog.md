@@ -718,3 +718,8 @@ Labeled sessions today: 11 warmup, **12 FH topspin**, **13 FH flat**, **14 backh
 
 ### Files changed
 - `scripts/calibrate.py` (multi-file mode, Fisher-weighted spin), `scripts/session_report.py` (`spin_feature`, weighted nearest-mean `classify_spin`). `calib.json` gitignored (user-specific).
+
+### Report reshaped for real matches (session_report.py)
+- A full match would make the per-rally table huge, so: **tagged points only** — when `events.csv` exists, untagged rallies (warm-up / noise) are dropped from all stats; untagged sessions still keep everything.
+- **Removed** the long rally-breakdown table. Kept the **strokes-per-rally** bars; replaced the speed histogram with a **swing-speed range** box (min / IQR / median / max).
+- Added a **Game summary** section at the end — `summarize()` writes plain-language, data-driven bullets (volume, FH/BH balance + speeds, dominant spin, provisional score + most-frequent error, and a first-vs-second-half win-rate trend / fatigue flag).

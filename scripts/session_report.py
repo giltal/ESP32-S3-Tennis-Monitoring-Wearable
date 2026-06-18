@@ -12,7 +12,7 @@ Usage:
 Exploratory: forehand/backhand is unsupervised (cluster->label is a heuristic
 until a labeled calibration session exists); speed is a rotational proxy.
 """
-import csv, sys, os, math, statistics, html, json
+import csv, sys, os, math, statistics, html, json, collections
 import numpy as np
 
 # ── tunables ──────────────────────────────────────────────────────────────
@@ -181,6 +181,53 @@ def bar_chart(pairs, w=320, h=150, color="#378ADD"):
         bars+=f'<text x="{x+bw/2:.0f}" y="{y-4:.0f}" font-size="10" fill="#222" text-anchor="middle">{v}</text>'
     return f'<svg viewBox="0 0 {w} {h}" width="100%">{bars}</svg>'
 
+def speed_range_svg(kmh, w=320, h=72):
+    if len(kmh) < 2: return ""
+    lo, hi = min(kmh), max(kmh); med = statistics.median(kmh)
+    qs = statistics.quantiles(kmh, n=4); p25, p75 = qs[0], qs[2]
+    def X(v): return 20 + (v - lo) / (hi - lo + 1e-9) * (w - 40)
+    return (f'<svg viewBox="0 0 {w} {h}" width="100%" role="img"><title>Swing speed range</title>'
+            f'<line x1="{X(lo):.0f}" y1="36" x2="{X(hi):.0f}" y2="36" stroke="#c8c8c2" stroke-width="2"/>'
+            f'<rect x="{X(p25):.0f}" y="25" width="{X(p75)-X(p25):.0f}" height="22" rx="4" fill="#9FE1CB"/>'
+            f'<line x1="{X(med):.0f}" y1="21" x2="{X(med):.0f}" y2="51" stroke="#0f6e56" stroke-width="2"/>'
+            f'<text x="{X(lo):.0f}" y="64" font-size="10" fill="#888" text-anchor="middle">{lo:.0f}</text>'
+            f'<text x="{X(med):.0f}" y="17" font-size="10" fill="#222" text-anchor="middle">{med:.0f}</text>'
+            f'<text x="{X(hi):.0f}" y="64" font-size="10" fill="#888" text-anchor="middle">{hi:.0f}</text></svg>')
+
+def summarize(strokes, rallies, outcomes, events):
+    """Plain-language, data-driven game summary (list of sentences)."""
+    out = []; n = len(strokes); rl = [len(r) for r in rallies]
+    if not n: return out
+    out.append(f"{len(rallies)} points, {n} of your strokes — averaging "
+               f"{statistics.mean(rl):.1f} strokes per point (longest {max(rl)}).")
+    fh = [s for s in strokes if s['type'] == 'Forehand']; bh = [s for s in strokes if s['type'] == 'Backhand']
+    if fh and bh:
+        side = ("forehand-heavy" if len(fh) > 1.2*len(bh) else
+                "backhand-heavy" if len(bh) > 1.2*len(fh) else "balanced")
+        out.append(f"Shot mix is {side} ({len(fh)} forehand / {len(bh)} backhand); "
+                   f"forehand ~{statistics.median([s['kmh'] for s in fh]):.0f} vs "
+                   f"backhand ~{statistics.median([s['kmh'] for s in bh]):.0f} km/h.")
+    spins = collections.Counter(s['spin'] for s in strokes if s.get('spin'))
+    if spins:
+        d = spins.most_common(1)[0]
+        out.append(f"Mostly {d[0]} ({d[1]} of {sum(spins.values())} classified).")
+    if events:
+        won = sum(1 for _, o in events if OUTCOME_SIGN.get(o, 0) > 0)
+        lost = sum(1 for _, o in events if OUTCOME_SIGN.get(o, 0) < 0)
+        errs = collections.Counter(o for _, o in events if OUTCOME_SIGN.get(o, 0) < 0)
+        msg = f"Provisional score: {won} won / {lost} lost."
+        if errs: msg += f" Most frequent error: {errs.most_common(1)[0][0]} ({errs.most_common(1)[0][1]})."
+        out.append(msg)
+        if len(events) >= 6:
+            h = len(events)//2
+            def wr(e): return sum(1 for _, o in e if OUTCOME_SIGN.get(o, 0) > 0)/len(e)
+            w1, w2 = wr(events[:h]), wr(events[h:])
+            if w2 - w1 <= -0.15:
+                out.append(f"Quality dropped in the second half (win rate {w1*100:.0f}% → {w2*100:.0f}%) — watch for fatigue.")
+            elif w2 - w1 >= 0.15:
+                out.append(f"You finished stronger (win rate {w1*100:.0f}% → {w2*100:.0f}%).")
+    return out
+
 def render(meta, strokes, rallies, sep, outcomes, out_path,
            has_spin=False, events=None, rally_tag=None):
     events = events or []; rally_tag = rally_tag or [None]*len(rallies)
@@ -192,26 +239,15 @@ def render(meta, strokes, rallies, sep, outcomes, out_path,
     rh={}
     for n in rl: rh[n]=rh.get(n,0)+1
     rhist=sorted(rh.items())
-    # speed histogram (bins of 15 km/h)
-    sh={}
-    for v in kmh:
-        b=int(v//15)*15; sh[b]=sh.get(b,0)+1
-    shist=[(f"{b}-{b+15}", sh[b]) for b in sorted(sh)]
 
     def card(label,val,sub=""):
         return (f'<div class="card"><div class="lbl">{label}</div>'
                 f'<div class="val">{val}<span class="unit">{sub}</span></div></div>')
 
-    rally_rows=""
-    for i,r in enumerate(rallies,1):
-        fhc=sum(1 for s in r if s['type']=='Forehand')
-        dur=(r[-1]['ms']-r[0]['ms'])/1000
-        pk=max(s['kmh'] for s in r)
-        t0=mmss(r[0]['ms']-meta['t0'])
-        tag=rally_tag[i-1] if i-1<len(rally_tag) else None
-        rally_rows+=(f"<tr><td>{i}</td><td>{t0}</td><td>{len(r)}</td>"
-                     f"<td>{dur:.1f}s</td><td>{fhc} FH / {len(r)-fhc} BH</td><td>{pk:.0f} km/h</td>"
-                     f"<td>{html.escape(tag) if tag else '—'}</td></tr>")
+    # game summary
+    summary=summarize(strokes, rallies, outcomes, events)
+    summary_html=("<div class='sec'><h2>Game summary</h2><ul style='margin:0;padding-left:18px;line-height:1.7'>"
+                  + "".join(f"<li>{html.escape(s)}</li>" for s in summary) + "</ul></div>") if summary else ""
 
     # spin breakdown (only when calibrated)
     spin_html=""
@@ -260,7 +296,7 @@ def render(meta, strokes, rallies, sep, outcomes, out_path,
  .two{{display:grid;grid-template-columns:1fr 1fr;gap:18px;}} @media(max-width:640px){{.two{{grid-template-columns:1fr;}}}}
 </style></head><body><div class="wrap">
 <h1>{html.escape(meta['name'])}</h1>
-<div class="sub">{meta['dur']:.0f}s · {len(strokes)} strokes · {len(rallies)} rallies</div>
+<div class="sub">{meta['dur']:.0f}s · {len(strokes)} strokes · {len(rallies)} {"tagged points" if meta.get('tagged_only') else "rallies"}</div>
 <div class="grid">
  {card("Strokes", len(strokes))}
  {card("Rallies", len(rallies))}
@@ -279,13 +315,11 @@ def render(meta, strokes, rallies, sep, outcomes, out_path,
 {score_html}
 
 <div class="two">
- <div class="sec"><h2>Strokes per rally</h2>{bar_chart(rhist)}<div class="note">Wearer's strokes only (full rally ≈ 2×).</div></div>
- <div class="sec"><h2>Swing speed (km/h)</h2>{bar_chart(shist, color="#1D9E75")}<div class="note">Rotational proxy, R={RACKET_R} m. Needs radar to calibrate absolute values.</div></div>
+ <div class="sec"><h2>Strokes per rally</h2>{bar_chart(rhist)}<div class="note">Your strokes only (full rally ≈ 2×).{" Tagged points only." if meta.get('tagged_only') else ""}</div></div>
+ <div class="sec"><h2>Swing speed range (km/h)</h2>{speed_range_svg(kmh)}<div class="note">Box = middle 50%, line = median. Rotational proxy (R={RACKET_R} m) — needs radar to calibrate absolute values.</div></div>
 </div>
 
-<div class="sec"><h2>Rally breakdown</h2>
- <table><tr><th>#</th><th>Start</th><th>Strokes</th><th>Duration</th><th>Types</th><th>Peak</th><th>Outcome</th></tr>{rally_rows}</table>
-</div>
+{summary_html}
 
 {"<div class='sec'><h2>Tagged outcomes</h2><table>"+out_rows+"</table></div>" if out_rows else ""}
 
@@ -333,8 +367,17 @@ def main():
                 best=i
         if best is not None: rally_tag[best]=oc
 
+    # If the session was tagged, keep ONLY tagged points (real scored rallies);
+    # drops warm-up / untagged noise. Untagged sessions keep everything.
+    if events:
+        keep=[i for i in range(len(rallies)) if rally_tag[i]]
+        rallies=[rallies[i] for i in keep]
+        rally_tag=[rally_tag[i] for i in keep]
+        strokes=[s for r in rallies for s in r]
+
     meta = dict(name=name, dur=(t[-1]-t[0])/1000, t0=int(t[0]),
-                hand=hand or "unknown", calibrated=bool(calib))
+                hand=hand or "unknown", calibrated=bool(calib),
+                tagged_only=bool(events))
     render(meta, strokes, rallies, sep, outcomes, out,
            has_spin=has_spin, events=events, rally_tag=rally_tag)
     fh=sum(1 for s in strokes if s['type']=='Forehand')
