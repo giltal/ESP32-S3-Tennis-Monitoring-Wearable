@@ -73,7 +73,8 @@ static const char *TAG = "tennis_test";
 #define AXP_REG_BAT_PERCENT 0xA4
 #define AXP_REG_LDO_EN0     0x90   /* LDO on/off (ALDO3 = bit 2 = vibration motor) */
 #define AXP_REG_ALDO3_VOL   0x94   /* ALDO3 voltage: 0.5V + 0.1V*n */
-#define MOTOR_ALDO3_BIT     2
+#define MOTOR_ALDO3_BIT     2      /* AXP2101 ALDO3 = motor supply rail */
+#define MOTOR_GPIO          18     /* MOTOR net gate (schematic: MOTOR/GPIO18) */
 #define MOTOR_BUZZ_MS       120    /* haptic pulse on a Play tag */
 
 /* PCF85063A RTC */
@@ -260,7 +261,12 @@ static void axp2101_enable_fuel_gauge(void)
     ESP_LOGI(TAG, "AXP2101 fuel gauge enabled (reg 0x18 = 0x%02x)", val);
 }
 
-/* ── Vibration motor (AXP2101 ALDO3 rail — its own rail, safe to toggle) ── */
+/* ── Vibration motor ──────────────────────────────────────────────────────
+ * Schematic (ESP32-S3-Touch-AMOLED-2.06): the MOTOR net is switched by a
+ * transistor whose gate is GPIO18 (net "MOTOR/GPIO18"); the motor is supplied
+ * by the AXP2101 ALDO3 rail. So: ALDO3 stays ON as the supply, and GPIO18
+ * HIGH/LOW gates the buzz. Driving ALDO3 alone (earlier attempt) did nothing.
+ */
 static esp_timer_handle_t motor_timer = NULL;
 
 static void axp2101_set_ldo(uint8_t bit, bool on)
@@ -273,7 +279,7 @@ static void axp2101_set_ldo(uint8_t bit, bool on)
     i2c_master_transmit(axp_i2c_dev, cmd, 2, 100);
 }
 
-static void motor_off_cb(void *arg) { axp2101_set_ldo(MOTOR_ALDO3_BIT, false); }
+static void motor_off_cb(void *arg) { gpio_set_level(MOTOR_GPIO, 0); }
 
 static void motor_init(void)
 {
@@ -281,16 +287,27 @@ static void motor_init(void)
         uint8_t cmd[2] = { AXP_REG_ALDO3_VOL, 25 };
         i2c_master_transmit(axp_i2c_dev, cmd, 2, 100);
     }
-    axp2101_set_ldo(MOTOR_ALDO3_BIT, false); /* ensure off at boot */
+    axp2101_set_ldo(MOTOR_ALDO3_BIT, true);  /* ALDO3 = motor supply, leave on */
+
+    gpio_config_t io = {
+        .pin_bit_mask = 1ULL << MOTOR_GPIO,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io);
+    gpio_set_level(MOTOR_GPIO, 0);           /* off at boot */
+
     const esp_timer_create_args_t a = { .callback = motor_off_cb, .name = "motor" };
     esp_timer_create(&a, &motor_timer);
 }
 
-/* Non-blocking haptic pulse: motor on now, one-shot timer turns it off. */
+/* Non-blocking haptic pulse: GPIO18 high now, one-shot timer drives it low. */
 static void motor_buzz(uint32_t ms)
 {
     if (!motor_timer) return;
-    axp2101_set_ldo(MOTOR_ALDO3_BIT, true);
+    gpio_set_level(MOTOR_GPIO, 1);
     esp_timer_stop(motor_timer);
     esp_timer_start_once(motor_timer, (uint64_t)ms * 1000);
 }
