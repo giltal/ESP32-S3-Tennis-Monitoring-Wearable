@@ -153,6 +153,25 @@ def spin_feature(s):
     return np.array([s['peak_acc'], s['peak_acc']/(s['peak_om']+1e-9),
                      rot[0]/rmag, rot[1]/rmag, rot[2]/rmag])
 
+def serve_feature(s):
+    """Serve signature: a serve is fast with a distinct overhead-pronation axis,
+    unlike forward/sideways groundstrokes."""
+    ax = np.array(s['axis'], dtype=float)
+    return np.array([s['peak_om'], s['peak_acc'], ax[0], ax[1]])
+
+def classify_serve(strokes, rallies, calib):
+    """Mark s['serve']=True for the first stroke of a rally that matches the
+    calibrated serve signature (vs groundstroke). Only first-of-rally strokes
+    can be serves (a serve starts the point)."""
+    for s in strokes: s['serve'] = False
+    if not calib or 'serve_mean' not in calib: return False
+    mu = np.array(calib['serve_feat_mean']); sd = np.array(calib['serve_feat_std'])
+    sv = np.array(calib['serve_mean']); gr = np.array(calib['ground_mean'])
+    for r in rallies:
+        z = (serve_feature(r[0]) - mu) / sd
+        if np.linalg.norm(z - sv) < np.linalg.norm(z - gr): r[0]['serve'] = True
+    return True
+
 def classify_spin(strokes, calib):
     """Nearest calibrated class-mean in standardized spin-feature space.
     Classes = whatever was calibrated (topspin+flat, or +slice)."""
@@ -211,6 +230,13 @@ def summarize(strokes, rallies, outcomes, events):
     if spins:
         d = spins.most_common(1)[0]
         out.append(f"Mostly {d[0]} ({d[1]} of {sum(spins.values())} classified).")
+    serves = [s for s in strokes if s.get('serve')]
+    if serves:
+        msg = (f"{len(serves)} serves detected, averaging {statistics.median([s['kmh'] for s in serves]):.0f} km/h "
+               f"(top {max(s['kmh'] for s in serves):.0f}).")
+        fsi = sum(1 for _, o in (events or []) if 'First serve' in o)
+        if fsi: msg += f" {fsi} first serves in ({100*fsi/len(serves):.0f}% of detected serves)."
+        out.append(msg)
     if events:
         won = sum(1 for _, o in events if OUTCOME_SIGN.get(o, 0) > 0)
         lost = sum(1 for _, o in events if OUTCOME_SIGN.get(o, 0) < 0)
@@ -375,6 +401,8 @@ def main():
         rallies=[rallies[i] for i in keep]
         rally_tag=[rally_tag[i] for i in keep]
         strokes=[s for r in rallies for s in r]
+
+    classify_serve(strokes, rallies, calib)   # mark serves (first-of-rally signature)
 
     meta = dict(name=name, dur=(t[-1]-t[0])/1000, t0=int(t[0]),
                 hand=hand or "unknown", calibrated=bool(calib),

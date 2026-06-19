@@ -11,15 +11,17 @@ A) One recording, hit in blocks separated by pauses:
 B) One file per stroke type (recommended):
    python calibrate.py --hand right \\
        --fh ses_012_full.csv,ses_013_full.csv --bh ses_014_full.csv \\
-       --topspin ses_012_full.csv --flat ses_013_full.csv [--slice ses_0XX.csv]
+       --topspin ses_012_full.csv --flat ses_013_full.csv \\
+       [--slice ses_0XX.csv] [--serve ses_0YY.csv]
 
 Forehand/backhand needs --fh and --bh. Spin needs >=2 of topspin/flat/slice.
-Paths are resolved relative to the current dir, then to ../Data.
+Serve needs --serve (a block of consecutive serves) plus --fh/--bh for the
+serve-vs-groundstroke contrast. Paths resolve to the current dir then ../Data.
 """
 import sys, os, json
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from session_report import load_csv, extract_strokes, spin_feature
+from session_report import load_csv, extract_strokes, spin_feature, serve_feature
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CALIB = os.path.join(HERE, "calib.json")
@@ -70,16 +72,18 @@ def collect_files(opts):
         return out
     fh, bh = grp('fh'), grp('bh')
     spin = {k: grp(k) for k in ('topspin', 'flat', 'slice') if opts.get(k)}
+    serve = grp('serve') if opts.get('serve') else []
     print(f"forehand strokes: {len(fh)}   backhand strokes: {len(bh)}")
     for k, v in spin.items(): print(f"  {k}: {len(v)} strokes")
-    return fh, bh, spin
+    if serve: print(f"  serve: {len(serve)} strokes")
+    return fh, bh, spin, serve
 
 # ── fit ─────────────────────────────────────────────────────────────────────
 def unit(v): return v / (np.linalg.norm(v) + 1e-9)
 
 def main():
     args = sys.argv[1:]; opts = {}; path = None; i = 0
-    keys = ('hand', 'blocks', 'fh', 'bh', 'topspin', 'flat', 'slice')
+    keys = ('hand', 'blocks', 'fh', 'bh', 'topspin', 'flat', 'slice', 'serve')
     while i < len(args):
         a = args[i]
         if a.startswith('--') and '=' in a:
@@ -91,9 +95,9 @@ def main():
     hand = opts.get('hand')
 
     if opts.get('blocks') and path:
-        fh, bh, spin = collect_blocks(path, opts['blocks'])
+        fh, bh, spin = collect_blocks(path, opts['blocks']); serve = []
     elif opts.get('fh') and opts.get('bh'):
-        fh, bh, spin = collect_files(opts)
+        fh, bh, spin, serve = collect_files(opts)
     else:
         print(__doc__); return
 
@@ -140,6 +144,25 @@ def main():
             print("  (no slice block yet — add a slice session to classify slices)")
     else:
         print("SPIN: need >=2 spin classes to fit (skipped)")
+
+    # serve vs groundstroke signature (serve = fast, overhead pronation axis)
+    if serve and (fh or bh):
+        ground = fh + bh
+        labeled = [(serve_feature(s), 1) for s in serve] + [(serve_feature(s), 0) for s in ground]
+        X = np.array([f for f, _ in labeled]); ya = np.array([l for _, l in labeled])
+        mu = X.mean(0); sd = X.std(0) + 1e-9; Z = (X - mu) / sd
+        sv = Z[ya == 1].mean(0); gr = Z[ya == 0].mean(0)
+        ok = 0
+        for i in range(len(Z)):
+            m = np.ones(len(Z), bool); m[i] = False
+            a = Z[m & (ya == 1)].mean(0); b = Z[m & (ya == 0)].mean(0)
+            ok += (1 if np.linalg.norm(Z[i]-a) < np.linalg.norm(Z[i]-b) else 0) == ya[i]
+        calib['serve_feat_mean'] = mu.tolist(); calib['serve_feat_std'] = sd.tolist()
+        calib['serve_mean'] = sv.tolist(); calib['ground_mean'] = gr.tolist()
+        print(f"SERVE: leave-one-out serve-vs-groundstroke accuracy {100*ok/len(Z):.0f}% "
+              f"({len(serve)} serves vs {len(ground)} groundstrokes)")
+    elif serve:
+        print("SERVE: need --fh/--bh groundstrokes too for the serve-vs-ground contrast")
 
     json.dump(calib, open(CALIB, 'w'), indent=2)
     print(f"\nWrote {CALIB}")

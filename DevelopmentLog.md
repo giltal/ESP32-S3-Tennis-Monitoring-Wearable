@@ -719,6 +719,12 @@ Labeled sessions today: 11 warmup, **12 FH topspin**, **13 FH flat**, **14 backh
 ### Files changed
 - `scripts/calibrate.py` (multi-file mode, Fisher-weighted spin), `scripts/session_report.py` (`spin_feature`, weighted nearest-mean `classify_spin`). `calib.json` gitignored (user-specific).
 
+### Serve detection — characterized + tooling ready (session_report + calibrate)
+- Court data (June 17, full games): the **"First serve in"** tag (12 across 3 sessions) gives partial serve ground-truth. Found the serve signature: **always first stroke of a rally** (12/12); **fast** (~82 km/h vs ~64 groundstroke); **distinct overhead-pronation axis** (ax_x −0.63 vs −0.33). Serve-like first-strokes **cluster into service games** (temporal confirmation).
+- Limitation: only first-serves-in are tagged, so most serves are unlabeled → tags alone can't train a clean serve-vs-return classifier (63% on noisy labels). The IMU can, with a **dedicated serve calibration block**.
+- **Tagging model (from user)**: `First serve in` = serve marker (not a point); the following tag is the point outcome. No marker before an outcome = 2nd-serve point. `Bad hit` = double fault OR bad shot (context). Win = `Good hit`; loss = Out/Unforced/Lost/Bad hit.
+- **Added serve support (ready, pending a serve block)**: `calibrate.py --serve <block>` fits a serve-vs-groundstroke signature `[peak_om, peak_acc, axis_x, axis_y]` (standardized nearest-mean, LOO reported) → `serve_mean`/`ground_mean` in calib.json. `session_report.classify_serve` marks first-of-rally strokes matching the serve signature; summary reports serve count, avg serve speed, and first-serve-in % (from tags). Graceful when no serve calib.
+
 ### Report reshaped for real matches (session_report.py)
 - A full match would make the per-rally table huge, so: **tagged points only** — when `events.csv` exists, untagged rallies (warm-up / noise) are dropped from all stats; untagged sessions still keep everything.
 - **Removed** the long rally-breakdown table. Kept the **strokes-per-rally** bars; replaced the speed histogram with a **swing-speed range** box (min / IQR / median / max).
