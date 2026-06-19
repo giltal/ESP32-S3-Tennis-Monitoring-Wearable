@@ -725,6 +725,9 @@ Labeled sessions today: 11 warmup, **12 FH topspin**, **13 FH flat**, **14 backh
 - **Tagging model (from user)**: `First serve in` = serve marker (not a point); the following tag is the point outcome. No marker before an outcome = 2nd-serve point. `Bad hit` = double fault OR bad shot (context). Win = `Good hit`; loss = Out/Unforced/Lost/Bad hit.
 - **Added serve support (ready, pending a serve block)**: `calibrate.py --serve <block>` fits a serve-vs-groundstroke signature `[peak_om, peak_acc, axis_x, axis_y]` (standardized nearest-mean, LOO reported) → `serve_mean`/`ground_mean` in calib.json. `session_report.classify_serve` marks first-of-rally strokes matching the serve signature; summary reports serve count, avg serve speed, and first-serve-in % (from tags). Graceful when no serve calib.
 
+### Haptic feedback on Play tags (v0.7)
+- Court-usability: a short vibration confirms each point tag. The motor runs off **AXP2101 ALDO3** (its own rail). `motor_init()` sets ALDO3=3.0V + ensures off; `motor_buzz(ms)` enables ALDO3 then a **one-shot esp_timer** (`motor_off_cb`) disables it after `MOTOR_BUZZ_MS`=120ms — **non-blocking** (touch handler just does 2 I2C writes + arms the timer, no UI freeze). Called on each Play slice tap. (Assumes ALDO3 drives the motor directly per the schematic; verify on device.)
+
 ### Report reshaped for real matches (session_report.py)
 - A full match would make the per-rally table huge, so: **tagged points only** — when `events.csv` exists, untagged rallies (warm-up / noise) are dropped from all stats; untagged sessions still keep everything.
 - **Removed** the long rally-breakdown table. Kept the **strokes-per-rally** bars; replaced the speed histogram with a **swing-speed range** box (min / IQR / median / max).

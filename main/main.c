@@ -63,7 +63,7 @@ static const char *TAG = "tennis_test";
 #define PLAY_INACT_MS          (30u * 60u * 1000u)  /* 30 min no-activity end */
 #define PLAY_BAT_CUTOFF        3      /* % → end session */
 
-#define FW_VERSION             "0.6"  /* firmware revision (shown on Config) */
+#define FW_VERSION             "0.7"  /* firmware revision (shown on Config) */
 #define FT3168_ADDR         0x38
 #define FT_REG_NUM_TOUCHES  0x02
 
@@ -71,6 +71,10 @@ static const char *TAG = "tennis_test";
 #define AXP2101_ADDR        0x34
 #define AXP_REG_FUEL_GAUGE  0x18
 #define AXP_REG_BAT_PERCENT 0xA4
+#define AXP_REG_LDO_EN0     0x90   /* LDO on/off (ALDO3 = bit 2 = vibration motor) */
+#define AXP_REG_ALDO3_VOL   0x94   /* ALDO3 voltage: 0.5V + 0.1V*n */
+#define MOTOR_ALDO3_BIT     2
+#define MOTOR_BUZZ_MS       120    /* haptic pulse on a Play tag */
 
 /* PCF85063A RTC */
 #define PCF85063A_ADDR      0x51
@@ -254,6 +258,41 @@ static void axp2101_enable_fuel_gauge(void)
     uint8_t cmd[2] = { AXP_REG_FUEL_GAUGE, val };
     i2c_master_transmit(axp_i2c_dev, cmd, 2, 100);
     ESP_LOGI(TAG, "AXP2101 fuel gauge enabled (reg 0x18 = 0x%02x)", val);
+}
+
+/* ── Vibration motor (AXP2101 ALDO3 rail — its own rail, safe to toggle) ── */
+static esp_timer_handle_t motor_timer = NULL;
+
+static void axp2101_set_ldo(uint8_t bit, bool on)
+{
+    if (!axp_i2c_dev) return;
+    uint8_t reg = AXP_REG_LDO_EN0, val = 0;
+    i2c_master_transmit_receive(axp_i2c_dev, &reg, 1, &val, 1, 100);
+    if (on) val |= (1 << bit); else val &= ~(1 << bit);
+    uint8_t cmd[2] = { AXP_REG_LDO_EN0, val };
+    i2c_master_transmit(axp_i2c_dev, cmd, 2, 100);
+}
+
+static void motor_off_cb(void *arg) { axp2101_set_ldo(MOTOR_ALDO3_BIT, false); }
+
+static void motor_init(void)
+{
+    if (axp_i2c_dev) {                       /* ALDO3 = 3.0V (0.5 + 0.1*25) */
+        uint8_t cmd[2] = { AXP_REG_ALDO3_VOL, 25 };
+        i2c_master_transmit(axp_i2c_dev, cmd, 2, 100);
+    }
+    axp2101_set_ldo(MOTOR_ALDO3_BIT, false); /* ensure off at boot */
+    const esp_timer_create_args_t a = { .callback = motor_off_cb, .name = "motor" };
+    esp_timer_create(&a, &motor_timer);
+}
+
+/* Non-blocking haptic pulse: motor on now, one-shot timer turns it off. */
+static void motor_buzz(uint32_t ms)
+{
+    if (!motor_timer) return;
+    axp2101_set_ldo(MOTOR_ALDO3_BIT, true);
+    esp_timer_stop(motor_timer);
+    esp_timer_start_once(motor_timer, (uint64_t)ms * 1000);
 }
 
 /* ── PCF85063A: read/write time ── */
@@ -1398,6 +1437,7 @@ static void touch_poll_cb(lv_timer_t *timer)
                 if (play_state == PLAY_RUNNING) {        /* count only while PLAY */
                     play_counts[sl]++;
                     play_set_slice_label(sl);
+                    motor_buzz(MOTOR_BUZZ_MS);           /* haptic feedback on tag */
                     if (play_events) {                   /* timestamped tag → scoring */
                         fprintf(play_events, "%lu,%s\n",
                                 (unsigned long)(esp_timer_get_time() / 1000),
@@ -1934,6 +1974,7 @@ void app_main(void)
     };
     i2c_master_bus_add_device(i2c_bus, &axp_cfg, &axp_i2c_dev);
     axp2101_enable_fuel_gauge();
+    motor_init();
 
     /* PCF85063A RTC */
     i2c_device_config_t rtc_cfg = {

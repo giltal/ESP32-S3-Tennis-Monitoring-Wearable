@@ -225,7 +225,7 @@ Latin `wT`/`aT` (Montserrat has no Greek ω/α glyphs). −/+ use `LV_SYMBOL_MIN
 |------|-----|---|--------|--------------|
 | DCDC1 | VCC3V3 | 3.3 | **SoC, PSRAM/flash, IMU, SD** | NO — bricks |
 | ALDO1 (0x90 b0) | A3V3 | 3.3 | **display VCI/VDDIO + ES8311/amp + touch analog** | NO — kills display |
-| ALDO3 (0x90 b2) | — | 3.0 | vibration motor (unused) | yes, but ~nil gain |
+| ALDO3 (0x90 b2) | — | 3.0 | vibration motor — pulsed for haptics (`motor_buzz`) | toggled, not cut |
 | ALDO2/4, BLDO1/2, DLDO1/2 | — | — | no load (likely NC) | — |
 
 **Audio has no dedicated rail** — it shares ALDO1 with the display, so it's gated by **GPIO46**, not the PMIC. The vibration motor is the only cuttable unused rail (ALDO3 = 0x90 bit 2), but idle draw is negligible. Schematic: `files.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-2.06/ESP32-S3-Touch-AMOLED-2.06.pdf`.
