@@ -198,8 +198,8 @@ def summarize(strokes, rallies, outcomes, events):
     """Plain-language, data-driven game summary (list of sentences)."""
     out = []; n = len(strokes); rl = [len(r) for r in rallies]
     if not n: return out
-    out.append(f"{len(rallies)} points, {n} of your strokes — averaging "
-               f"{statistics.mean(rl):.1f} strokes per point (longest {max(rl)}).")
+    out.append(f"{len(rallies)} rallies, {n} of your strokes — averaging "
+               f"{statistics.mean(rl):.1f} strokes per rally (longest {max(rl)}).")
     fh = [s for s in strokes if s['type'] == 'Forehand']; bh = [s for s in strokes if s['type'] == 'Backhand']
     if fh and bh:
         side = ("forehand-heavy" if len(fh) > 1.2*len(bh) else
@@ -296,7 +296,7 @@ def render(meta, strokes, rallies, sep, outcomes, out_path,
  .two{{display:grid;grid-template-columns:1fr 1fr;gap:18px;}} @media(max-width:640px){{.two{{grid-template-columns:1fr;}}}}
 </style></head><body><div class="wrap">
 <h1>{html.escape(meta['name'])}</h1>
-<div class="sub">{meta['dur']:.0f}s · {len(strokes)} strokes · {len(rallies)} {"tagged points" if meta.get('tagged_only') else "rallies"}</div>
+<div class="sub">{meta['dur']:.0f}s · {len(strokes)} strokes · {len(rallies)} rallies</div>
 <div class="grid">
  {card("Strokes", len(strokes))}
  {card("Rallies", len(rallies))}
@@ -315,7 +315,7 @@ def render(meta, strokes, rallies, sep, outcomes, out_path,
 {score_html}
 
 <div class="two">
- <div class="sec"><h2>Strokes per rally</h2>{bar_chart(rhist)}<div class="note">Your strokes only (full rally ≈ 2×).{" Tagged points only." if meta.get('tagged_only') else ""}</div></div>
+ <div class="sec"><h2>Strokes per rally</h2>{bar_chart(rhist)}<div class="note">Your strokes only (full rally ≈ 2×).{" Single untagged hits excluded." if meta.get('filtered') else ""}</div></div>
  <div class="sec"><h2>Swing speed range (km/h)</h2>{speed_range_svg(kmh)}<div class="note">Box = middle 50%, line = median. Rotational proxy (R={RACKET_R} m) — needs radar to calibrate absolute values.</div></div>
 </div>
 
@@ -367,17 +367,18 @@ def main():
                 best=i
         if best is not None: rally_tag[best]=oc
 
-    # If the session was tagged, keep ONLY tagged points (real scored rallies);
-    # drops warm-up / untagged noise. Untagged sessions keep everything.
+    # A real rally is a multi-stroke exchange (>=2) OR a tagged single point.
+    # Drop only single untagged hits (stray contacts / noise). Applied when the
+    # session was tagged; untagged sessions keep everything.
     if events:
-        keep=[i for i in range(len(rallies)) if rally_tag[i]]
+        keep=[i for i,r in enumerate(rallies) if len(r)>=2 or rally_tag[i]]
         rallies=[rallies[i] for i in keep]
         rally_tag=[rally_tag[i] for i in keep]
         strokes=[s for r in rallies for s in r]
 
     meta = dict(name=name, dur=(t[-1]-t[0])/1000, t0=int(t[0]),
                 hand=hand or "unknown", calibrated=bool(calib),
-                tagged_only=bool(events))
+                filtered=bool(events))
     render(meta, strokes, rallies, sep, outcomes, out,
            has_spin=has_spin, events=events, rally_tag=rally_tag)
     fh=sum(1 for s in strokes if s['type']=='Forehand')
