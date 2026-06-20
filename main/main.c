@@ -262,10 +262,13 @@ static void axp2101_enable_fuel_gauge(void)
 }
 
 /* ── Vibration motor ──────────────────────────────────────────────────────
- * Schematic (ESP32-S3-Touch-AMOLED-2.06): the MOTOR net is switched by a
- * transistor whose gate is GPIO18 (net "MOTOR/GPIO18"); the motor is supplied
- * by the AXP2101 ALDO3 rail. So: ALDO3 stays ON as the supply, and GPIO18
- * HIGH/LOW gates the buzz. Driving ALDO3 alone (earlier attempt) did nothing.
+ * NOTE: this board has NO vibration motor populated. The 2.06 spec lists no
+ * haptic; the schematic only provides a driver + header J4 ("Motor": MOTOR/GND
+ * pads). Driver = Q1 MMBT3904 NPN, base on GPIO18 (net "MOTOR/GPIO18") via R12
+ * 4.7K, supplied by AXP2101 ALDO3. So ALDO3 stays ON (supply) and GPIO18 HIGH
+ * gates the buzz. The code below is correct and DORMANT — solder a motor to the
+ * J4 MOTOR/GND pads and `motor_buzz()` on each Play tag will drive it. With no
+ * motor attached these calls are harmless no-ops electrically.
  */
 static esp_timer_handle_t motor_timer = NULL;
 

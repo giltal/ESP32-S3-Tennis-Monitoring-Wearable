@@ -1,0 +1,8 @@
+Good hit=37
+Out=17
+Bad hit=13
+Unforced error=2
+First serve in=14
+Lost point=12
+Total hits=253
+hand=right

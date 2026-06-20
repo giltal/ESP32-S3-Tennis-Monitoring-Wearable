@@ -225,10 +225,10 @@ Latin `wT`/`aT` (Montserrat has no Greek ω/α glyphs). −/+ use `LV_SYMBOL_MIN
 |------|-----|---|--------|--------------|
 | DCDC1 | VCC3V3 | 3.3 | **SoC, PSRAM/flash, IMU, SD** | NO — bricks |
 | ALDO1 (0x90 b0) | A3V3 | 3.3 | **display VCI/VDDIO + ES8311/amp + touch analog** | NO — kills display |
-| ALDO3 (0x90 b2) | — | 3.0 | vibration motor **supply** (left ON); buzz gated by **GPIO18** | supply on, GPIO switches |
+| ALDO3 (0x90 b2) | — | 3.0 | motor-header **supply** (driver only; no motor populated) | supply on, GPIO switches |
 | ALDO2/4, BLDO1/2, DLDO1/2 | — | — | no load (likely NC) | — |
 
-**Audio has no dedicated rail** — it shares ALDO1 with the display, so it's gated by **GPIO46**, not the PMIC. **Vibration motor**: schematic net is `MOTOR/GPIO18` — a transistor switched by **GPIO18**, supplied by ALDO3. So ALDO3 stays ON (supply) and GPIO18 HIGH=buzz/LOW=off (`motor_buzz`, non-blocking via one-shot timer). Toggling ALDO3 alone does NOT vibrate — the GPIO is the switch. Schematic: `files.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-2.06/ESP32-S3-Touch-AMOLED-2.06.pdf`.
+**Audio has no dedicated rail** — it shares ALDO1 with the display, so it's gated by **GPIO46**, not the PMIC. **Vibration motor — NOT POPULATED on this board.** The 2.06 spec lists no haptic; the schematic only has a driver (Q1 MMBT3904 NPN, base on **GPIO18** via R12 4.7K, supplied by **ALDO3**) feeding a header **J4 "Motor"** (`MOTOR`/`GND` pads). Our `motor_init`/`motor_buzz` drive it correctly (ALDO3 on + GPIO18 active-high, non-blocking one-shot timer) but it's **dormant** — verified electrically (ALDO3=3.0V on, GPIO18 toggles) yet nothing vibrates because no motor is attached. Solder an ERM/LRA to J4 to enable haptics. AXP power-on default has 0x90=0xFF (all LDOs on). Schematic: `files.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-2.06/ESP32-S3-Touch-AMOLED-2.06.pdf`.
 
 ## Critical Gotchas
 

@@ -725,11 +725,16 @@ Labeled sessions today: 11 warmup, **12 FH topspin**, **13 FH flat**, **14 backh
 - **Tagging model (from user)**: `First serve in` = serve marker (not a point); the following tag is the point outcome. No marker before an outcome = 2nd-serve point. `Bad hit` = double fault OR bad shot (context). Win = `Good hit`; loss = Out/Unforced/Lost/Bad hit.
 - **Added serve support (ready, pending a serve block)**: `calibrate.py --serve <block>` fits a serve-vs-groundstroke signature `[peak_om, peak_acc, axis_x, axis_y]` (standardized nearest-mean, LOO reported) → `serve_mean`/`ground_mean` in calib.json. `session_report.classify_serve` marks first-of-rally strokes matching the serve signature; summary reports serve count, avg serve speed, and first-serve-in % (from tags). Graceful when no serve calib.
 
-### Haptic feedback on Play tags (v0.7)
-- Court-usability: a short vibration confirms each point tag. Called on each Play slice tap; **non-blocking** (set the pin, arm a one-shot esp_timer to release after `MOTOR_BUZZ_MS`=120ms — no UI freeze).
-- **First attempt (wrong):** pulsed only the AXP2101 **ALDO3** rail — motor did **not** vibrate.
-- **Root cause (from schematic):** the motor net is `MOTOR/GPIO18` — a transistor **switched by GPIO18**, *supplied* by ALDO3. ALDO3 alone is just the rail; GPIO18 is the actual switch. Found by extracting the schematic PDF text layer (pypdf): net labels `MOTORGPIO18`, `MOTOR`, `QMI_INT1 MOTOR GND`.
-- **Fix:** `motor_init()` enables ALDO3 (3.0V, left ON as supply) + configures GPIO18 as output-low; `motor_buzz()` drives GPIO18 high, the one-shot timer (`motor_off_cb`) drives it low. GPIO18 is otherwise unused in our pin map.
+### Haptic feedback on Play tags (v0.7) — board has NO motor populated
+- Goal: a short vibration confirms each point tag in Play. `motor_buzz()` on each tap, **non-blocking** (set pin, one-shot esp_timer releases after `MOTOR_BUZZ_MS`=120ms — no UI freeze).
+- **Outcome: cannot vibrate — there is no physical vibration motor on this board.** The 2.06 onboard-resource spec lists no haptic; the schematic only provides a **driver + header J4 "Motor"** (`MOTOR`/`GND` pads). Demos agree: Arduino `pin_config.h` defines no motor pin; the IDF AXP demo repurposes ALDO3 as "PIR VDD".
+- **Debug path (kept for reference):**
+  - v1 pulsed only ALDO3 → nothing.
+  - From the schematic PDF text (pypdf): driver = Q1 MMBT3904 NPN, base on **GPIO18** (net `MOTOR/GPIO18`) via R12 4.7K, supply = **ALDO3**. Drove GPIO18 active-high → nothing.
+  - Serial readback proved the rail is genuinely up: `0x90(LDO_EN)=0xFF`, `0x94(ALDO3_VOL)=0x19` (3000mV). The AXP power-on default already has all LDOs on.
+  - Swept GPIO18 DC high, DC low, PWM 150/175/205/235Hz (LRA check), and ALDO3-pulse combos (GPIO18 static + ALDO3 toggled). **All nothing** → confirmed the pads are simply unpopulated.
+  - Note: candidate pins 16/40/42/45 from an early scan are the **BSP I2S audio** pins (SCLK=41, MCLK=16, LCLK=45, DOUT=40, DSIN=42) — not the motor.
+- **Final state:** `motor_init()` (ALDO3 on as supply + GPIO18 output-low) and `motor_buzz()` (GPIO18 high → one-shot timer low) are correct and left **dormant**. Solder an ERM/LRA to J4 to enable haptics; calls are harmless no-ops otherwise. Boot self-test removed.
 
 ### Report reshaped for real matches (session_report.py)
 - A full match would make the per-rally table huge, so: **tagged points only** — when `events.csv` exists, untagged rallies (warm-up / noise) are dropped from all stats; untagged sessions still keep everything.
