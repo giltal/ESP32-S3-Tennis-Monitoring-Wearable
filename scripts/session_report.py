@@ -82,6 +82,18 @@ def extract_strokes(t, g, a, om, hit):
         accmag=np.linalg.norm(a[lo2:hi2],axis=1)
         gv=g[pk]; n=np.linalg.norm(gv)
         peak_om=float(om[pk])
+        # pre-contact posture: gravity direction in the quietest 100ms sub-window
+        # ~0.2-0.7s BEFORE contact. A serve is set up overhead (arm raised) so
+        # this points very differently than a horizontal groundstroke ready pose.
+        pg_lo=np.searchsorted(t,t[pk]-700); pg_hi=np.searchsorted(t,t[pk]-200)
+        pregrav=grav_dir=None
+        if pg_hi-pg_lo>=50:
+            bj,bm=pg_lo,None
+            for j in range(pg_lo,pg_hi-50,10):
+                mm=float(np.mean(om[j:j+50]))
+                if bm is None or mm<bm: bm=mm; bj=j
+            pv=a[bj:bj+50].mean(0); pn=np.linalg.norm(pv)
+            pregrav=pv/pn if pn>0 else pv
         # net rotation through the swing (gyro integral, deg) — encodes the
         # low->high (topspin) vs high->low (slice) brush direction.
         dts=np.diff(t[lo2:hi2])/1000.0 if hi2-lo2>1 else np.array([])
@@ -92,6 +104,7 @@ def extract_strokes(t, g, a, om, hit):
             peak_acc=float(accmag.max()) if len(accmag) else 0.0,
             axis=(gv/n if n>0 else gv),
             rot=rot, grav=(grav/gn if gn>0 else grav),
+            pregrav=(pregrav if pregrav is not None else (grav/gn if gn>0 else grav)),
             kmh=math.radians(peak_om)*RACKET_R*3.6,
             dur_ms=int(np.sum(om[lo2:hi2]>0.4*peak_om)*2),
         ))
@@ -154,10 +167,13 @@ def spin_feature(s):
                      rot[0]/rmag, rot[1]/rmag, rot[2]/rmag])
 
 def serve_feature(s):
-    """Serve signature: a serve is fast with a distinct overhead-pronation axis,
-    unlike forward/sideways groundstrokes."""
-    ax = np.array(s['axis'], dtype=float)
-    return np.array([s['peak_om'], s['peak_acc'], ax[0], ax[1]])
+    """Serve signature: the arm is set up OVERHEAD before a serve, so the
+    pre-contact gravity direction (posture ~0.5s before contact) points very
+    differently than a horizontal groundstroke ready pose. The y,z components
+    separate serve-vs-ground at ~91% LOO; the contact-instant axis does not
+    (serve pronation ≈ forehand pronation), so it's deliberately excluded."""
+    pg = np.array(s.get('pregrav', s['grav']), dtype=float)
+    return np.array([pg[1], pg[2]])
 
 def classify_serve(strokes, rallies, calib):
     """Mark s['serve']=True for the first stroke of a rally that matches the
