@@ -86,7 +86,7 @@ def extract_strokes(t, g, a, om, hit):
         # ~0.2-0.7s BEFORE contact. A serve is set up overhead (arm raised) so
         # this points very differently than a horizontal groundstroke ready pose.
         pg_lo=np.searchsorted(t,t[pk]-700); pg_hi=np.searchsorted(t,t[pk]-200)
-        pregrav=grav_dir=None
+        pregrav=None
         if pg_hi-pg_lo>=50:
             bj,bm=pg_lo,None
             for j in range(pg_lo,pg_hi-50,10):
