@@ -749,3 +749,10 @@ Labeled sessions today: 11 warmup, **12 FH topspin**, **13 FH flat**, **14 backh
 - **Set-end logic (`play_evaluate_set`).** Ends at 6 with a ≥2 lead, or at 7 (7–5 / 7–6); 5–5 runs on. Freezes with an 80%-black `SET x-y` overlay; BOOT saves + exits. `play_toggle`/taps ignored while frozen.
 - **Opponent GOOD/BAD pair** (their shot quality) as a separate labeled bottom band; own live counts + `events.csv` tags.
 - **Files.** `outcomes.txt` now also writes `Opponent good/bad` and `Set games you/opp`; `events.csv` logs opponent tags and `game_you±`/`game_opp±`/`set_end`. `scripts/session_report.py` updated (new `OUTCOME_SIGN`, Ace/opponent/set rows; legacy names still parse).
+
+#### v0.8 layout refinement (user feedback)
+- Game circles moved to the **screen edges** (OPP x=60 / YOU x=350); dropped the on-screen "tap +1 / hold -1" hint.
+- **Enlarged the ring** (R_OUT 126→150, R_IN 56→64, centre y 292→280) and the icons (44→52px, regenerated).
+- Battery/clock **inset further** (±45→±62) so they clear the rounded corners.
+- Opponent buttons: **headline on top** ("OPP GOOD"/"OPP BAD", colored top border), count moved to the **inner** side (icon on the outer side) so the number no longer sits on the rounded edge. Dropped the separate "OPPONENT" caption.
+- COM port is now **COM4** (updated in CLAUDE.md).

@@ -5,9 +5,10 @@ emits main/play_icons.c + main/play_icons.h."""
 import os
 from PIL import Image, ImageDraw
 
-SIZE = 44          # on-device icon size (px)
-SS   = 5           # supersample factor
-S    = SIZE * SS   # working canvas
+SIZE  = 52         # on-device icon size (px, final)
+LOGIC = 44         # logical drawing space the painters use (centre 22,22)
+SS    = 6          # supersample factor
+S     = LOGIC * SS # working canvas
 WHITE = (255, 255, 255, 255)
 DARK  = (20, 20, 20, 255)
 

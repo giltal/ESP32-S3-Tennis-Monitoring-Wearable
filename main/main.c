@@ -64,22 +64,22 @@ static const char *TAG = "tennis_test";
  * opponent GOOD/BAD pair (bottom). LVGL screen centre is (205,251); the ring
  * is pushed down (centre 205,292) to make room for the scoreboard. */
 #define PLAY_CX                205    /* ring centre X (screen coords) */
-#define PLAY_CY                292    /* ring centre Y (screen coords) */
-#define PLAY_R_IN              56     /* center dial radius */
-#define PLAY_R_OUT             126    /* outer ring radius */
+#define PLAY_CY                280    /* ring centre Y (screen coords) */
+#define PLAY_R_IN              64     /* center dial radius */
+#define PLAY_R_OUT             150    /* outer ring radius (enlarged "pizza") */
 #define PLAY_NUM_SLICES        5
 #define PLAY_INACT_MS          (30u * 60u * 1000u)  /* 30 min no-activity end */
 #define PLAY_BAT_CUTOFF        3      /* % → end session */
 #define PLAY_HOLD_MS           1000u  /* hold a game circle this long → −1 */
 
-/* Scoreboard game circles (screen coords): OPP left, YOU right */
-#define PLAY_GC_OPP_X          112
-#define PLAY_GC_YOU_X          298
-#define PLAY_GC_Y              98
-#define PLAY_GC_R              40     /* tap radius (visual r is a touch smaller) */
+/* Scoreboard game circles (screen coords): OPP far-left, YOU far-right */
+#define PLAY_GC_OPP_X          60
+#define PLAY_GC_YOU_X          350
+#define PLAY_GC_Y              95
+#define PLAY_GC_R              42     /* tap radius (visual r is a touch smaller) */
 
 /* Opponent GOOD/BAD button band (screen coords) */
-#define PLAY_OPP_Y0            442
+#define PLAY_OPP_Y0            434
 #define PLAY_OPP_Y1            496
 #define PLAY_OPP_GOOD_X0       16
 #define PLAY_OPP_GOOD_X1       198
@@ -1779,9 +1779,12 @@ static lv_obj_t *make_game_circle(int cx, int cy, lv_color_t border)
     return d;
 }
 
-/* Small helper: an opponent GOOD/BAD button (dark, colored left edge). */
+/* Small helper: an opponent GOOD/BAD button. Headline (e.g. "OPP GOOD") sits
+ * on top; below it the icon is on the OUTER side and the count on the INNER
+ * side (toward screen center) so the number stays off the rounded edge.
+ * inner_left = true for the right-hand button (its inner side is the left). */
 static lv_obj_t *make_opp_btn(int x0, int x1, const char *sym,
-                              const char *text, lv_color_t accent)
+                              const char *cap, lv_color_t accent, bool inner_left)
 {
     lv_obj_t *b = lv_obj_create(scr_play);
     lv_obj_remove_style_all(b);
@@ -1791,27 +1794,29 @@ static lv_obj_t *make_opp_btn(int x0, int x1, const char *sym,
     lv_obj_set_style_bg_color(b, lv_color_make(35, 37, 43), 0);
     lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(b, accent, 0);
-    lv_obj_set_style_border_side(b, LV_BORDER_SIDE_LEFT, 0);
-    lv_obj_set_style_border_width(b, 7, 0);
+    lv_obj_set_style_border_side(b, LV_BORDER_SIDE_TOP, 0);
+    lv_obj_set_style_border_width(b, 4, 0);
     lv_obj_remove_flag(b, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *hd = lv_label_create(b);
+    lv_obj_set_style_text_font(hd, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(hd, accent, 0);
+    lv_label_set_text(hd, cap);
+    lv_obj_align(hd, LV_ALIGN_TOP_MID, 0, 4);
 
     lv_obj_t *ic = lv_label_create(b);
     lv_obj_set_style_text_font(ic, &lv_font_montserrat_28, 0);
     lv_obj_set_style_text_color(ic, accent, 0);
     lv_label_set_text(ic, sym);
-    lv_obj_align(ic, LV_ALIGN_LEFT_MID, 16, 0);
-
-    lv_obj_t *tx = lv_label_create(b);
-    lv_obj_set_style_text_font(tx, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(tx, lv_color_make(200, 200, 200), 0);
-    lv_label_set_text(tx, text);
-    lv_obj_align(tx, LV_ALIGN_CENTER, 6, 0);
+    lv_obj_align(ic, inner_left ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_BOTTOM_LEFT,
+                 inner_left ? -18 : 18, -6);
 
     lv_obj_t *cnt = lv_label_create(b);
     lv_obj_set_style_text_font(cnt, &lv_font_montserrat_28, 0);
     lv_obj_set_style_text_color(cnt, lv_color_white(), 0);
     lv_label_set_text(cnt, "0");
-    lv_obj_align(cnt, LV_ALIGN_RIGHT_MID, -16, 0);
+    lv_obj_align(cnt, inner_left ? LV_ALIGN_BOTTOM_LEFT : LV_ALIGN_BOTTOM_RIGHT,
+                 inner_left ? 20 : -20, -6);
     return cnt;
 }
 
@@ -1828,47 +1833,35 @@ static void create_play_screen(void)
     play_lbl_bat = lv_label_create(scr_play);
     lv_obj_set_style_text_font(play_lbl_bat, &lv_font_montserrat_20, 0);
     set_battery_label(play_lbl_bat, -1);
-    lv_obj_align(play_lbl_bat, LV_ALIGN_TOP_LEFT, 45, 10);
+    lv_obj_align(play_lbl_bat, LV_ALIGN_TOP_LEFT, 62, 12);   /* inset off rounded corner */
 
     play_lbl_hits = lv_label_create(scr_play);
     lv_obj_set_style_text_color(play_lbl_hits, lv_color_make(0, 200, 255), 0);
     lv_obj_set_style_text_font(play_lbl_hits, &lv_font_montserrat_24, 0);
     lv_label_set_text(play_lbl_hits, "Hits 0");
-    lv_obj_align(play_lbl_hits, LV_ALIGN_TOP_MID, 0, 8);
+    lv_obj_align(play_lbl_hits, LV_ALIGN_TOP_MID, 0, 10);
 
     play_lbl_time = lv_label_create(scr_play);
     lv_obj_set_style_text_color(play_lbl_time, lv_color_make(190, 190, 190), 0);
     lv_obj_set_style_text_font(play_lbl_time, &lv_font_montserrat_20, 0);
     lv_label_set_text(play_lbl_time, "--:--");
-    lv_obj_align(play_lbl_time, LV_ALIGN_TOP_RIGHT, -45, 10);
+    lv_obj_align(play_lbl_time, LV_ALIGN_TOP_RIGHT, -62, 12);  /* inset off rounded corner */
 
-    /* ── Scoreboard: game circles (OPP left, YOU right) ── */
+    /* ── Scoreboard: game circles at the edges (OPP left, YOU right) ── */
     lv_obj_t *lo = lv_label_create(scr_play);
     lv_obj_set_style_text_font(lo, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(lo, lv_color_make(200, 45, 45), 0);
     lv_label_set_text(lo, "OPP");
-    lv_obj_set_pos(lo, PLAY_GC_OPP_X - 20, PLAY_GC_Y - 56);
+    lv_obj_align(lo, LV_ALIGN_TOP_LEFT, PLAY_GC_OPP_X - 22, PLAY_GC_Y - 52);
 
     lv_obj_t *ly_ = lv_label_create(scr_play);
     lv_obj_set_style_text_font(ly_, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(ly_, lv_color_make(29, 158, 85), 0);
     lv_label_set_text(ly_, "YOU");
-    lv_obj_set_pos(ly_, PLAY_GC_YOU_X - 22, PLAY_GC_Y - 56);
-
-    lv_obj_t *dash = lv_label_create(scr_play);
-    lv_obj_set_style_text_font(dash, &lv_font_montserrat_36, 0);
-    lv_obj_set_style_text_color(dash, lv_color_make(110, 110, 110), 0);
-    lv_label_set_text(dash, "-");
-    lv_obj_align(dash, LV_ALIGN_TOP_MID, 0, PLAY_GC_Y - 24);
+    lv_obj_align(ly_, LV_ALIGN_TOP_LEFT, PLAY_GC_YOU_X - 22, PLAY_GC_Y - 52);
 
     play_lbl_g_opp = make_game_circle(PLAY_GC_OPP_X, PLAY_GC_Y, lv_color_make(200, 45, 45));
     play_lbl_g_you = make_game_circle(PLAY_GC_YOU_X, PLAY_GC_Y, lv_color_make(29, 158, 85));
-
-    lv_obj_t *shint = lv_label_create(scr_play);
-    lv_obj_set_style_text_font(shint, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(shint, lv_color_make(110, 110, 110), 0);
-    lv_label_set_text(shint, "tap +1    hold 1s -1");
-    lv_obj_align(shint, LV_ALIGN_TOP_MID, 0, PLAY_GC_Y + 42);
 
     /* ── 5-slice player ring (72° each), slice 0 centered at top ── */
     const int starts[PLAY_NUM_SLICES] = { 234, 306,  18,  90, 162 };
@@ -1879,10 +1872,10 @@ static void create_play_screen(void)
         lv_color_make(235, 120, 20),   /* Bad hit        — orange */
         lv_color_make(200, 45, 45),    /* Unforced error — red    */
         lv_color_make(45, 106, 216) }; /* Ace            — blue   */
-    /* icon+count offsets from SCREEN center at each slice mid-angle (incl. the
-     * ring's +41 downward shift): top, upper-right, lower-right, lower-left, UL */
-    const int ox[PLAY_NUM_SLICES] = {  0,  82,  51, -51, -82 };
-    const int oy[PLAY_NUM_SLICES] = { -45, 14, 111, 111,  14 };
+    /* icon+count offsets from SCREEN center at each slice mid-angle (radius ~106,
+     * incl. the ring's downward shift): top, upper-right, lower-right, LL, UL */
+    const int ox[PLAY_NUM_SLICES] = {  0, 101,  62, -62, -101 };
+    const int oy[PLAY_NUM_SLICES] = { -77, -4, 115, 115,   -4 };
 
     for (int i = 0; i < PLAY_NUM_SLICES; i++) {
         lv_obj_t *a = lv_arc_create(scr_play);
@@ -1904,14 +1897,14 @@ static void create_play_screen(void)
     for (int i = 0; i < PLAY_NUM_SLICES; i++) {
         lv_obj_t *ic = lv_image_create(scr_play);
         lv_image_set_src(ic, play_icons[i]);
-        lv_obj_align(ic, LV_ALIGN_CENTER, ox[i], oy[i] - 12);
+        lv_obj_align(ic, LV_ALIGN_CENTER, ox[i], oy[i] - 14);
 
         lv_obj_t *cnt = lv_label_create(scr_play);
         lv_obj_set_style_text_color(cnt, lv_color_white(), 0);
         lv_obj_set_style_text_font(cnt, &lv_font_montserrat_28, 0);
         lv_obj_set_style_text_align(cnt, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(cnt, "0");
-        lv_obj_align(cnt, LV_ALIGN_CENTER, ox[i], oy[i] + 22);
+        lv_obj_align(cnt, LV_ALIGN_CENTER, ox[i], oy[i] + 24);
         play_lbl_slice[i] = cnt;
     }
 
@@ -1928,22 +1921,18 @@ static void create_play_screen(void)
     lv_obj_remove_flag(circ, LV_OBJ_FLAG_SCROLLABLE);
 
     play_lbl_state = lv_label_create(circ);
-    lv_obj_set_style_text_font(play_lbl_state, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(play_lbl_state, &lv_font_montserrat_32, 0);
     lv_obj_set_style_text_color(play_lbl_state, lv_color_make(190, 190, 190), 0);
     lv_label_set_text(play_lbl_state, "PAUSE");
     lv_obj_center(play_lbl_state);
 
-    /* ── Opponent GOOD / BAD pair (separate labeled section) ── */
-    lv_obj_t *ocap = lv_label_create(scr_play);
-    lv_obj_set_style_text_font(ocap, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(ocap, lv_color_make(138, 138, 138), 0);
-    lv_label_set_text(ocap, "OPPONENT");
-    lv_obj_align(ocap, LV_ALIGN_TOP_MID, 0, PLAY_OPP_Y0 - 26);
-
+    /* ── Opponent GOOD / BAD pair (headline on top, count on the inner side) ── */
     play_lbl_opp_good = make_opp_btn(PLAY_OPP_GOOD_X0, PLAY_OPP_GOOD_X1,
-                                     LV_SYMBOL_OK, "GOOD", lv_color_make(29, 158, 85));
+                                     LV_SYMBOL_OK, "OPP GOOD",
+                                     lv_color_make(29, 158, 85), false);
     play_lbl_opp_bad  = make_opp_btn(PLAY_OPP_BAD_X0, PLAY_OPP_BAD_X1,
-                                     LV_SYMBOL_WARNING, "BAD", lv_color_make(235, 120, 20));
+                                     LV_SYMBOL_WARNING, "OPP BAD",
+                                     lv_color_make(235, 120, 20), true);
 
     /* ── Set-over freeze overlay (hidden until the set ends) ── */
     play_setover_ov = lv_obj_create(scr_play);
