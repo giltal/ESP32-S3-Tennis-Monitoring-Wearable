@@ -47,7 +47,7 @@ Two physical buttons drive navigation (the touchscreen handles on-screen control
 ### Recording a session
 
 1. **Set your hand** in Config (Right/Left), and **Sync Clock** once so files are dated correctly.
-2. **Play mode** (Home → PLAY): press **PWR** to start (**PLAY**), tag each point on its slice, **PWR** to pause between games, **BOOT** when done. A folder `PlaySession_YYYY-MM-DD_HH-MM/` is written to the SD with `hits.csv`, `outcomes.txt`, and `events.csv`. The session also auto-ends on low battery (≤3 %) or 30 min idle.
+2. **Play mode** (Home → PLAY): press **PWR** to start (**PLAY**). Tag your shots on the ring and the opponent's on the **OPPONENT** GOOD/BAD pair, and keep the set score on the **OPP/YOU** game circles (tap +1, hold 1 s for −1). **PWR** pauses between games (game circles stay editable while paused); the set auto-ends at 6 (with a 2-game lead) or 7 and freezes with a **SET x–y** banner. Press **BOOT** when done. A folder `PlaySession_YYYY-MM-DD_HH-MM/` is written to the SD with `hits.csv`, `outcomes.txt` (outcome + opponent counts + final set score), and `events.csv` (timestamped tags + game changes). The session also auto-ends on low battery (≤3 %) or 30 min idle.
 3. **Test & Tune** (Home → TEST): press **REC** to log raw IMU to `ses_NNN_full.csv` (ALL) or `ses_NNN_hit.csv` (HIT-capture) for offline analysis.
 
 ### Analysing a session (`scripts/`)
