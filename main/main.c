@@ -64,9 +64,9 @@ static const char *TAG = "tennis_test";
  * opponent GOOD/BAD pair (bottom). LVGL screen centre is (205,251); the ring
  * is pushed down (centre 205,292) to make room for the scoreboard. */
 #define PLAY_CX                205    /* ring centre X (screen coords) */
-#define PLAY_CY                280    /* ring centre Y (screen coords) */
-#define PLAY_R_IN              64     /* center dial radius */
-#define PLAY_R_OUT             150    /* outer ring radius (enlarged "pizza") */
+#define PLAY_CY                270    /* ring centre Y (screen coords) */
+#define PLAY_R_IN              68     /* center dial radius */
+#define PLAY_R_OUT             160    /* outer ring radius (enlarged "pizza") */
 #define PLAY_NUM_SLICES        5
 #define PLAY_INACT_MS          (30u * 60u * 1000u)  /* 30 min no-activity end */
 #define PLAY_BAT_CUTOFF        3      /* % → end session */
@@ -1809,7 +1809,7 @@ static lv_obj_t *make_opp_btn(int x0, int x1, const char *sym,
     lv_obj_set_style_text_color(ic, accent, 0);
     lv_label_set_text(ic, sym);
     lv_obj_align(ic, inner_left ? LV_ALIGN_BOTTOM_RIGHT : LV_ALIGN_BOTTOM_LEFT,
-                 inner_left ? -18 : 18, -6);
+                 inner_left ? -44 : 44, -6);
 
     lv_obj_t *cnt = lv_label_create(b);
     lv_obj_set_style_text_font(cnt, &lv_font_montserrat_28, 0);
@@ -1872,10 +1872,10 @@ static void create_play_screen(void)
         lv_color_make(235, 120, 20),   /* Bad hit        — orange */
         lv_color_make(200, 45, 45),    /* Unforced error — red    */
         lv_color_make(45, 106, 216) }; /* Ace            — blue   */
-    /* icon+count offsets from SCREEN center at each slice mid-angle (radius ~106,
+    /* icon+count offsets from SCREEN center at each slice mid-angle (radius ~112,
      * incl. the ring's downward shift): top, upper-right, lower-right, LL, UL */
-    const int ox[PLAY_NUM_SLICES] = {  0, 101,  62, -62, -101 };
-    const int oy[PLAY_NUM_SLICES] = { -77, -4, 115, 115,   -4 };
+    const int ox[PLAY_NUM_SLICES] = {  0, 107,  66, -66, -107 };
+    const int oy[PLAY_NUM_SLICES] = { -93, -16, 110, 110,  -16 };
 
     for (int i = 0; i < PLAY_NUM_SLICES; i++) {
         lv_obj_t *a = lv_arc_create(scr_play);
@@ -1904,7 +1904,7 @@ static void create_play_screen(void)
         lv_obj_set_style_text_font(cnt, &lv_font_montserrat_28, 0);
         lv_obj_set_style_text_align(cnt, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(cnt, "0");
-        lv_obj_align(cnt, LV_ALIGN_CENTER, ox[i], oy[i] + 24);
+        lv_obj_align(cnt, LV_ALIGN_CENTER, ox[i], oy[i] + 26);
         play_lbl_slice[i] = cnt;
     }
 
