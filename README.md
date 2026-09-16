@@ -21,7 +21,7 @@ Built with **ESP-IDF v5.5.2** + **LVGL 9**.
 
 - **Home** — battery, live clock, mode selection; AMOLED dim-to-clock screen-sleep.
 - **Test & Tune** — live hit detection with on-device ω/α threshold tuning and SD recording (HIT-capture or ALL modes).
-- **Play** — play/pause match logging with a 6-slice outcome dial (good hit, out, bad hit, unforced error, first serve in, lost point); per-session folder with hit log + outcome counts.
+- **Play** — play/pause match logging with a 5-slice outcome ring (good hit, out, bad hit, unforced error, ace), an opponent GOOD/BAD pair, and a manual set scoreboard (game circles: tap +1, hold to −1) that auto-ends the set; per-session folder with hit log + outcome/score counts.
 - **Config** — handedness, on-demand WiFi→NTP clock sync, live RTC date/time, firmware version.
 - **Power management** — IMU idled off the tuning screen, DFS, screen-sleep.
 
@@ -42,7 +42,7 @@ Two physical buttons drive navigation (the touchscreen handles on-screen control
 | Play | Config |
 |:---:|:---:|
 | <img src="docs/screens/play.svg" width="230" alt="Play screen"> | <img src="docs/screens/config.svg" width="230" alt="Config screen"> |
-| Tap the matching slice to tag each point — ✓ good hit, ↑ out, ⚠ bad hit, ✗ unforced error, ▶ first serve in, ▼ lost point. Center shows **PLAY/PAUSE** (toggle with PWR). Top row: battery · session hits · clock. | Pick your **playing hand** (improves forehand/backhand analysis), **Sync Clock** over WiFi/NTP, and check the live date/time. Firmware version shown top-right. |
+| Tap a slice to tag each of your shots — good hit, out, bad hit, unforced error, ace — or the **OPPONENT** GOOD/BAD pair for theirs. Keep the set score on the **OPP/YOU** game circles (tap +1, hold 1 s for −1); the set auto-ends (6 with a 2-game lead, or 7) and freezes with a **SET x–y** banner. Center shows **PLAY/PAUSE** (toggle with PWR). | Pick your **playing hand** (improves forehand/backhand analysis), **Sync Clock** over WiFi/NTP, and check the live date/time. Firmware version shown top-right. |
 
 ### Recording a session
 

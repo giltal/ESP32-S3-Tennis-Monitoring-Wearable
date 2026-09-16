@@ -3,31 +3,79 @@
   <rect x="30" y="29" width="410" height="502" rx="34" fill="#000000" stroke="#2a2a30" stroke-width="1"/>
   <g transform="translate(30,29)">
     <!-- top info row -->
-    <text x="46" y="30" fill="#00c864" font-size="20">82%</text>
-    <text x="205" y="30" fill="#00c8ff" font-size="22" text-anchor="middle">Hits 5</text>
-    <text x="360" y="30" fill="#bebebe" font-size="20" text-anchor="end">14:32</text>
-    <!-- 6 ring segments (stroke-based donut), center 205,251 r~134 width108 -->
-    <g fill="none" stroke-width="108">
-      <path d="M144.2 131.6 A134 134 0 0 1 265.8 131.6" stroke="#1d9e55"/>
-      <path d="M278.0 138.6 A134 134 0 0 1 338.8 244.0" stroke="#e1c814"/>
-      <path d="M338.8 258.0 A134 134 0 0 1 278.0 363.4" stroke="#eb7814"/>
-      <path d="M265.8 370.4 A134 134 0 0 1 144.2 370.4" stroke="#c82d2d"/>
-      <path d="M132.0 363.4 A134 134 0 0 1 71.2 258.0" stroke="#2d6ad8"/>
-      <path d="M71.2 244.0 A134 134 0 0 1 132.0 138.6" stroke="#e1e1e1"/>
+    <text x="40" y="24" fill="#00c864" font-size="19">82%</text>
+    <text x="205" y="26" fill="#00c8ff" font-size="20" text-anchor="middle">Hits 5</text>
+    <text x="370" y="24" fill="#bebebe" font-size="19" text-anchor="end">14:32</text>
+
+    <!-- scoreboard: game circles (OPP left, YOU right) -->
+    <text x="112" y="52" fill="#c82d2d" font-size="15" text-anchor="middle">OPP</text>
+    <circle cx="112" cy="98" r="34" fill="#161616" stroke="#c82d2d" stroke-width="3"/>
+    <text x="112" y="112" fill="#ffffff" font-size="36" font-weight="bold" text-anchor="middle">2</text>
+    <text x="205" y="110" fill="#6e6e6e" font-size="34" text-anchor="middle">-</text>
+    <text x="298" y="52" fill="#1d9e55" font-size="15" text-anchor="middle">YOU</text>
+    <circle cx="298" cy="98" r="34" fill="#161616" stroke="#1d9e55" stroke-width="3"/>
+    <text x="298" y="112" fill="#ffffff" font-size="36" font-weight="bold" text-anchor="middle">4</text>
+    <text x="205" y="150" fill="#6e6e6e" font-size="14" text-anchor="middle">tap +1    hold 1s -1</text>
+
+    <!-- 5-slice player ring, center 205,292 -->
+    <g fill="none" stroke-width="70">
+      <path d="M151.5 218.4 A91 91 0 0 1 258.5 218.4" stroke="#1d9e55"/>
+      <path d="M258.5 218.4 A91 91 0 0 1 291.5 320.1" stroke="#e1c814"/>
+      <path d="M291.5 320.1 A91 91 0 0 1 205.0 383.0" stroke="#eb7814"/>
+      <path d="M205.0 383.0 A91 91 0 0 1 118.5 320.1" stroke="#c82d2d"/>
+      <path d="M118.5 320.1 A91 91 0 0 1 151.5 218.4" stroke="#2d6ad8"/>
     </g>
-    <!-- slice icons -->
-    <g font-size="34" text-anchor="middle" fill="#ffffff">
-      <text x="205" y="138">&#10003;</text>
-      <text x="313" y="200">&#8593;</text>
-      <text x="313" y="325">&#9888;</text>
-      <text x="205" y="388">&#10007;</text>
-      <text x="97"  y="325">&#9654;</text>
-      <text x="97"  y="200" fill="#222222">&#9660;</text>
+
+    <!-- GOOD: check -->
+    <polyline points="195,204 203,213 218,191" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="205" y="236" font-size="19" fill="#fff" text-anchor="middle">3</text>
+
+    <!-- OUT: court + ball landed outside -->
+    <g transform="translate(288.7,262)">
+      <rect x="-16" y="-9" width="22" height="19" fill="none" stroke="#151515" stroke-width="2.5"/>
+      <line x1="-5" y1="-9" x2="-5" y2="10" stroke="#151515" stroke-width="1.6"/>
+      <circle cx="14" cy="-11" r="6" fill="#151515"/>
     </g>
+    <text x="288.7" y="296" font-size="19" fill="#151515" text-anchor="middle">1</text>
+
+    <!-- BAD: ball caught in the net -->
+    <g transform="translate(256.7,360)" stroke="#fff" fill="none">
+      <rect x="-15" y="-9" width="30" height="21" stroke-width="2"/>
+      <line x1="-8" y1="-9" x2="-8" y2="12" stroke-width="1"/>
+      <line x1="-1" y1="-9" x2="-1" y2="12" stroke-width="1"/>
+      <line x1="8" y1="-9" x2="8" y2="12" stroke-width="1"/>
+      <line x1="-15" y1="-2" x2="15" y2="-2" stroke-width="1"/>
+      <line x1="-15" y1="5" x2="15" y2="5" stroke-width="1"/>
+      <circle cx="0" cy="3" r="6" fill="#fff" stroke="none"/>
+    </g>
+    <text x="256.7" y="396" font-size="19" fill="#fff" text-anchor="middle">0</text>
+
+    <!-- UNFORCED: X -->
+    <g stroke="#fff" stroke-width="6" stroke-linecap="round">
+      <line x1="144" y1="353" x2="163" y2="372"/>
+      <line x1="163" y1="353" x2="144" y2="372"/>
+    </g>
+    <text x="153.3" y="396" font-size="19" fill="#fff" text-anchor="middle">2</text>
+
+    <!-- ACE: serve bolt -->
+    <polygon points="127,249 114,268 122,268 117,283 132,261 123,261" fill="#fff"/>
+    <text x="121.3" y="296" font-size="19" fill="#fff" text-anchor="middle">5</text>
+
     <!-- center dial -->
-    <circle cx="205" cy="251" r="74" fill="#161616" stroke="#444" stroke-width="2"/>
-    <text x="205" y="262" fill="#bebebe" font-size="30" font-weight="bold" text-anchor="middle">PAUSE</text>
-    <!-- hint -->
-    <text x="205" y="486" fill="#6e6e6e" font-size="18" text-anchor="middle">BOOT = back    PWR = play/pause</text>
+    <circle cx="205" cy="292" r="56" fill="#161616" stroke="#444" stroke-width="2"/>
+    <text x="205" y="302" fill="#bebebe" font-size="25" font-weight="bold" text-anchor="middle">PAUSE</text>
+
+    <!-- opponent pair -->
+    <text x="205" y="437" fill="#8a8a8a" font-size="14" text-anchor="middle" letter-spacing="2">OPPONENT</text>
+    <rect x="16" y="446" width="182" height="50" rx="10" fill="#23252b"/>
+    <rect x="16" y="446" width="7" height="50" rx="3" fill="#1d9e55"/>
+    <text x="52" y="478" font-size="26" fill="#1d9e55" text-anchor="middle">&#10003;</text>
+    <text x="112" y="472" font-size="15" fill="#c8c8c8" text-anchor="middle">GOOD</text>
+    <text x="150" y="480" font-size="24" fill="#fff" text-anchor="middle" font-weight="bold">2</text>
+    <rect x="212" y="446" width="182" height="50" rx="10" fill="#23252b"/>
+    <rect x="212" y="446" width="7" height="50" rx="3" fill="#eb7814"/>
+    <text x="248" y="478" font-size="26" fill="#eb7814" text-anchor="middle">&#9888;</text>
+    <text x="308" y="472" font-size="15" fill="#c8c8c8" text-anchor="middle">BAD</text>
+    <text x="346" y="480" font-size="24" fill="#fff" text-anchor="middle" font-weight="bold">1</text>
   </g>
 </svg>

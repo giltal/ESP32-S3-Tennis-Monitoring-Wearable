@@ -40,6 +40,7 @@
 #include "lvgl.h"
 #include "qmi8658.h"
 #include "hit_detector.h"
+#include "play_icons.h"
 
 static const char *TAG = "tennis_test";
 
@@ -59,16 +60,33 @@ static const char *TAG = "tennis_test";
 #define BRIGHT_FULL            80
 #define BRIGHT_DIM             40
 
-/* Play mode: center dial + ring of 5 tappable slices (screen center 205,251) */
-#define PLAY_CX                205
-#define PLAY_CY                251
-#define PLAY_R_IN              74     /* center circle radius */
-#define PLAY_R_OUT             195    /* outer ring radius */
-#define PLAY_NUM_SLICES        6
+/* Play mode: match scoreboard (top) + ring of 5 tappable outcome slices +
+ * opponent GOOD/BAD pair (bottom). LVGL screen centre is (205,251); the ring
+ * is pushed down (centre 205,292) to make room for the scoreboard. */
+#define PLAY_CX                205    /* ring centre X (screen coords) */
+#define PLAY_CY                292    /* ring centre Y (screen coords) */
+#define PLAY_R_IN              56     /* center dial radius */
+#define PLAY_R_OUT             126    /* outer ring radius */
+#define PLAY_NUM_SLICES        5
 #define PLAY_INACT_MS          (30u * 60u * 1000u)  /* 30 min no-activity end */
 #define PLAY_BAT_CUTOFF        3      /* % → end session */
+#define PLAY_HOLD_MS           1000u  /* hold a game circle this long → −1 */
 
-#define FW_VERSION             "0.7"  /* firmware revision (shown on Config) */
+/* Scoreboard game circles (screen coords): OPP left, YOU right */
+#define PLAY_GC_OPP_X          112
+#define PLAY_GC_YOU_X          298
+#define PLAY_GC_Y              98
+#define PLAY_GC_R              40     /* tap radius (visual r is a touch smaller) */
+
+/* Opponent GOOD/BAD button band (screen coords) */
+#define PLAY_OPP_Y0            442
+#define PLAY_OPP_Y1            496
+#define PLAY_OPP_GOOD_X0       16
+#define PLAY_OPP_GOOD_X1       198
+#define PLAY_OPP_BAD_X0        212
+#define PLAY_OPP_BAD_X1        394
+
+#define FW_VERSION             "0.8"  /* firmware revision (shown on Config) */
 #define FT3168_ADDR         0x38
 #define FT_REG_NUM_TOUCHES  0x02
 
@@ -198,7 +216,7 @@ static lv_obj_t *main_btn_play, *main_btn_test;          /* home mode buttons */
 typedef enum { PLAY_PAUSED, PLAY_RUNNING } play_state_t;
 static play_state_t play_state = PLAY_PAUSED;
 static lv_obj_t *play_lbl_state;                 /* center PLAY/PAUSE text */
-static lv_obj_t *play_lbl_slice[PLAY_NUM_SLICES];/* per-slice name + count */
+static lv_obj_t *play_lbl_slice[PLAY_NUM_SLICES];/* per-slice live count */
 static lv_obj_t *play_lbl_bat, *play_lbl_time, *play_lbl_hits; /* top info row */
 static uint32_t  play_counts[PLAY_NUM_SLICES];
 static bool      play_session_active = false;
@@ -207,13 +225,27 @@ static bool      play_files_open     = false;    /* folder+hits.csv created (fir
 static char      play_dir[80];                   /* /sdcard/PlaySession_... */
 static FILE     *play_events = NULL;             /* timestamped outcome tags (events.csv) */
 static volatile uint32_t play_last_activity_ms = 0;  /* hit / tap / PWR */
-/* Slice order clockwise from the top (used in outcomes.txt) */
+/* Player outcome slices, clockwise from the top (used in outcomes.txt) */
 static const char *play_names[PLAY_NUM_SLICES] = {
-    "Good hit", "Out", "Bad hit", "Unforced error", "First serve in", "Lost point" };
+    "Good hit", "Out", "Bad hit", "Unforced error", "Ace" };
+static const lv_image_dsc_t *play_icons[PLAY_NUM_SLICES] = {
+    &play_ic_good, &play_ic_out, &play_ic_bad, &play_ic_unforced, &play_ic_ace };
+
+/* Match set score (manual): games won by each side. Right circle = you. */
+static int       play_games_you = 0, play_games_opp = 0;
+static lv_obj_t *play_lbl_g_you, *play_lbl_g_opp;   /* digits in the circles */
+static bool      play_set_over = false;             /* set finished → frozen */
+static lv_obj_t *play_setover_ov;                   /* full-screen freeze overlay */
+static lv_obj_t *play_lbl_setover;                  /* "SET 6–2" banner */
+
+/* Opponent GOOD / BAD tags (separate labeled pair) */
+static uint32_t  play_opp_good = 0, play_opp_bad = 0;
+static lv_obj_t *play_lbl_opp_good, *play_lbl_opp_bad;
 
 /* Forward decls used across the file */
 static void nav_to(app_screen_t s);
 static void imu_set_paused(bool pause);
+static void play_refresh_state_label(void);
 
 /* ── Power management (Home = low-power; Test = full rate) ── */
 static TaskHandle_t imu_handle = NULL;       /* 500Hz IMU task */
@@ -1020,6 +1052,69 @@ static void play_set_slice_label(int i)
         lv_label_set_text_fmt(play_lbl_slice[i], "%lu", (unsigned long)play_counts[i]);
 }
 
+static void play_refresh_games(void)
+{
+    if (play_lbl_g_you) lv_label_set_text_fmt(play_lbl_g_you, "%d", play_games_you);
+    if (play_lbl_g_opp) lv_label_set_text_fmt(play_lbl_g_opp, "%d", play_games_opp);
+}
+
+static void play_refresh_opp(void)
+{
+    if (play_lbl_opp_good) lv_label_set_text_fmt(play_lbl_opp_good, "%lu",
+                                                 (unsigned long)play_opp_good);
+    if (play_lbl_opp_bad)  lv_label_set_text_fmt(play_lbl_opp_bad,  "%lu",
+                                                 (unsigned long)play_opp_bad);
+}
+
+/* Append one timestamped tag to events.csv (scoring source of truth) */
+static void play_log_event(const char *what)
+{
+    if (play_events) {
+        fprintf(play_events, "%lu,%s\n", (unsigned long)now_ms_u32(), what);
+        fflush(play_events);
+    }
+}
+
+/* Tennis set end: a side reaches 6 with the other ≤4, OR a side reaches 7
+ * (covers 7–5 and 7–6). At 5–5 the set runs on to 7–5 or 7–6. */
+static void play_evaluate_set(void)
+{
+    int hi   = play_games_you > play_games_opp ? play_games_you : play_games_opp;
+    int diff = play_games_you - play_games_opp; if (diff < 0) diff = -diff;
+    if (play_set_over) return;
+    if ((hi >= 6 && diff >= 2) || hi >= 7) {
+        play_set_over = true;
+        play_state = PLAY_PAUSED;          /* freeze scoring + logging */
+        logging_active = false;
+        imu_set_paused(true);
+        play_refresh_state_label();
+        if (play_lbl_setover)
+            lv_label_set_text_fmt(play_lbl_setover, "SET  %d-%d",
+                                  play_games_you, play_games_opp);
+        if (play_setover_ov) lv_obj_remove_flag(play_setover_ov, LV_OBJ_FLAG_HIDDEN);
+        play_log_event("set_end");
+        ESP_LOGI(TAG, "Set over %d-%d", play_games_you, play_games_opp);
+    }
+}
+
+/* Manual game score: side 0 = opponent (left), 1 = you (right). delta ±1. */
+static void play_games_bump(int side, int delta)
+{
+    if (play_set_over) return;
+    int *g = side ? &play_games_you : &play_games_opp;
+    int nv = *g + delta;
+    if (nv < 0) nv = 0;
+    if (nv > 7) nv = 7;
+    if (nv == *g) return;
+    *g = nv;
+    play_last_activity_ms = now_ms_u32();
+    play_refresh_games();
+    motor_buzz(MOTOR_BUZZ_MS);
+    play_log_event(side ? (delta > 0 ? "game_you+" : "game_you-")
+                        : (delta > 0 ? "game_opp+" : "game_opp-"));
+    play_evaluate_set();
+}
+
 static void play_refresh_state_label(void)
 {
     if (!play_lbl_state) return;
@@ -1035,6 +1130,10 @@ static void play_refresh_state_label(void)
 static void start_play_session(void)
 {
     for (int i = 0; i < PLAY_NUM_SLICES; i++) { play_counts[i] = 0; play_set_slice_label(i); }
+    play_games_you = play_games_opp = 0;  play_refresh_games();
+    play_opp_good  = play_opp_bad  = 0;   play_refresh_opp();
+    play_set_over = false;
+    if (play_setover_ov) lv_obj_add_flag(play_setover_ov, LV_OBJ_FLAG_HIDDEN);
     play_state = PLAY_PAUSED;
     play_session_ended = false;
     play_files_open = false;
@@ -1104,6 +1203,10 @@ static void end_play_session(void)
             if (fb) {
                 for (int i = 0; i < PLAY_NUM_SLICES; i++)
                     fprintf(fb, "%s=%lu\n", play_names[i], (unsigned long)play_counts[i]);
+                fprintf(fb, "Opponent good=%lu\n", (unsigned long)play_opp_good);
+                fprintf(fb, "Opponent bad=%lu\n",  (unsigned long)play_opp_bad);
+                fprintf(fb, "Set games you=%d\n",  play_games_you);
+                fprintf(fb, "Set games opp=%d\n",  play_games_opp);
                 fprintf(fb, "Total hits=%lu\n", (unsigned long)detector.hit_count);
                 fprintf(fb, "hand=%s\n", g_left_handed ? "left" : "right");
                 fflush(fb);
@@ -1137,7 +1240,7 @@ static void update_play_screen(void)
 /* PWR/GPIO10 in Play = toggle PLAY/PAUSE (gates IMU + File A append) */
 static void play_toggle(void)
 {
-    if (!play_session_active) return;
+    if (!play_session_active || play_set_over) return;  /* frozen after set end */
     play_last_activity_ms = now_ms_u32();
     if (play_state == PLAY_RUNNING) {
         play_state = PLAY_PAUSED;
@@ -1400,6 +1503,9 @@ static void touch_poll_cb(lv_timer_t *timer)
 {
     static bool was_pressed = false;
     static uint32_t touch_zero_since = 0;   /* ms of first zero-read of a release */
+    static int  play_circle = -1;           /* game circle held: -1 none, 0 opp, 1 you */
+    static uint32_t play_circle_ms = 0;     /* press-start of the held circle */
+    static bool play_circle_fired = false;  /* hold already decremented once */
 
     /* Ignore all input while the display is frozen for a WiFi sync */
     if (g_display_freeze) return;
@@ -1451,26 +1557,46 @@ static void touch_poll_cb(lv_timer_t *timer)
             }
             break;
         case SCREEN_PLAY: {
-            /* Angular hit-test of the 5-slice ring (atan2 of the touch vector) */
-            int dx = tx - PLAY_CX, dy = ty - PLAY_CY;
-            int d2 = dx * dx + dy * dy;
-            if (d2 > PLAY_R_IN * PLAY_R_IN && d2 <= PLAY_R_OUT * PLAY_R_OUT) {
-                play_last_activity_ms = (uint32_t)(esp_timer_get_time() / 1000);
-                float ang = atan2f((float)dy, (float)dx) * 57.29578f;   /* deg */
-                if (ang < 0.0f) ang += 360.0f;                         /* [0,360) */
-                /* 6 slices of 60°, slice 0 centered at top (270°) */
-                int sl = (((int)ang + 120) % 360) / 60;
-                if (sl < 0) sl = 0;
-                if (sl > 5) sl = 5;
-                if (play_state == PLAY_RUNNING) {        /* count only while PLAY */
-                    play_counts[sl]++;
-                    play_set_slice_label(sl);
-                    motor_buzz(MOTOR_BUZZ_MS);           /* haptic feedback on tag */
-                    if (play_events) {                   /* timestamped tag → scoring */
-                        fprintf(play_events, "%lu,%s\n",
-                                (unsigned long)(esp_timer_get_time() / 1000),
-                                play_names[sl]);
-                        fflush(play_events);
+            if (play_set_over) break;    /* frozen — only BOOT/PWR respond */
+            /* Game circles (tap +1 / hold 1s -1) — editable in PLAY and PAUSE.
+             * Defer the +1 to release so a hold can decrement instead. */
+            int od = (tx-PLAY_GC_OPP_X)*(tx-PLAY_GC_OPP_X) + (ty-PLAY_GC_Y)*(ty-PLAY_GC_Y);
+            int yd = (tx-PLAY_GC_YOU_X)*(tx-PLAY_GC_YOU_X) + (ty-PLAY_GC_Y)*(ty-PLAY_GC_Y);
+            if (od <= PLAY_GC_R*PLAY_GC_R) {
+                play_circle = 0; play_circle_ms = now_ms_u32(); play_circle_fired = false;
+                play_last_activity_ms = now_ms_u32();
+            } else if (yd <= PLAY_GC_R*PLAY_GC_R) {
+                play_circle = 1; play_circle_ms = now_ms_u32(); play_circle_fired = false;
+                play_last_activity_ms = now_ms_u32();
+            }
+            /* Outcome tags only while PLAY is running */
+            else if (play_state == PLAY_RUNNING) {
+                /* Opponent GOOD/BAD pair */
+                if (tx >= PLAY_OPP_GOOD_X0 && tx <= PLAY_OPP_GOOD_X1 &&
+                    ty >= PLAY_OPP_Y0 && ty <= PLAY_OPP_Y1) {
+                    play_opp_good++; play_refresh_opp();
+                    play_last_activity_ms = now_ms_u32();
+                    motor_buzz(MOTOR_BUZZ_MS); play_log_event("Opponent good");
+                } else if (tx >= PLAY_OPP_BAD_X0 && tx <= PLAY_OPP_BAD_X1 &&
+                           ty >= PLAY_OPP_Y0 && ty <= PLAY_OPP_Y1) {
+                    play_opp_bad++; play_refresh_opp();
+                    play_last_activity_ms = now_ms_u32();
+                    motor_buzz(MOTOR_BUZZ_MS); play_log_event("Opponent bad");
+                } else {
+                    /* Angular hit-test of the 5-slice ring */
+                    int dx = tx - PLAY_CX, dy = ty - PLAY_CY;
+                    int d2 = dx * dx + dy * dy;
+                    if (d2 > PLAY_R_IN * PLAY_R_IN && d2 <= PLAY_R_OUT * PLAY_R_OUT) {
+                        float ang = atan2f((float)dy, (float)dx) * 57.29578f;
+                        if (ang < 0.0f) ang += 360.0f;
+                        int sl = (((int)ang - 234 + 360) % 360) / 72;   /* slice 0 = top */
+                        if (sl < 0) sl = 0;
+                        if (sl > PLAY_NUM_SLICES - 1) sl = PLAY_NUM_SLICES - 1;
+                        play_counts[sl]++;
+                        play_set_slice_label(sl);
+                        play_last_activity_ms = now_ms_u32();
+                        motor_buzz(MOTOR_BUZZ_MS);
+                        play_log_event(play_names[sl]);
                     }
                 }
             }
@@ -1523,13 +1649,27 @@ static void touch_poll_cb(lv_timer_t *timer)
             break;
         default: break;
         }
+    } else if (npts > 0 && was_pressed &&
+               play_circle >= 0 && !play_circle_fired) {
+        /* Held on a game circle: after 1s decrement once (suppresses the +1). */
+        if (now_ms_u32() - play_circle_ms >= PLAY_HOLD_MS) {
+            play_games_bump(play_circle, -1);
+            play_circle_fired = true;
+        }
     } else if (npts == 0 && was_pressed) {
         /* Re-arm only after a sustained release, so a mid-press npts=0 flicker
          * (one or two dropped reports) does not read as a second tap. */
         uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
         if (touch_zero_since == 0) touch_zero_since = now;   /* first zero-read */
-        else if (now - touch_zero_since >= TOUCH_RELEASE_DEBOUNCE_MS)
+        else if (now - touch_zero_since >= TOUCH_RELEASE_DEBOUNCE_MS) {
             was_pressed = false;
+            /* Quick tap on a game circle (released before the 1s hold) → +1 */
+            if (play_circle >= 0) {
+                if (!play_circle_fired) play_games_bump(play_circle, 1);
+                play_circle = -1;
+                play_circle_fired = false;
+            }
+        }
     }
 }
 
@@ -1618,99 +1758,77 @@ static void create_main_screen(void)
                                 &lv_font_montserrat_36, NULL);
 }
 
-/* Play screen: center PLAY/PAUSE dial + ring of 5 colored, tappable slices.
- * Slices map clockwise from the top: Good hit, Out, Unforced, First serve,
- * Lost pt. Tap = increment (PLAY only); PWR = play/pause; BOOT = back. */
+/* Small helper: a game-score circle with a big digit; returns the digit label. */
+static lv_obj_t *make_game_circle(int cx, int cy, lv_color_t border)
+{
+    lv_obj_t *c = lv_obj_create(scr_play);
+    lv_obj_remove_style_all(c);
+    lv_obj_set_size(c, 68, 68);
+    lv_obj_set_pos(c, cx - 34, cy - 34);
+    lv_obj_set_style_radius(c, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(c, lv_color_make(22, 22, 22), 0);
+    lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(c, border, 0);
+    lv_obj_set_style_border_width(c, 3, 0);
+    lv_obj_remove_flag(c, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *d = lv_label_create(c);
+    lv_obj_set_style_text_font(d, &lv_font_montserrat_36, 0);
+    lv_obj_set_style_text_color(d, lv_color_white(), 0);
+    lv_label_set_text(d, "0");
+    lv_obj_center(d);
+    return d;
+}
+
+/* Small helper: an opponent GOOD/BAD button (dark, colored left edge). */
+static lv_obj_t *make_opp_btn(int x0, int x1, const char *sym,
+                              const char *text, lv_color_t accent)
+{
+    lv_obj_t *b = lv_obj_create(scr_play);
+    lv_obj_remove_style_all(b);
+    lv_obj_set_pos(b, x0, PLAY_OPP_Y0);
+    lv_obj_set_size(b, x1 - x0, PLAY_OPP_Y1 - PLAY_OPP_Y0);
+    lv_obj_set_style_radius(b, 10, 0);
+    lv_obj_set_style_bg_color(b, lv_color_make(35, 37, 43), 0);
+    lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(b, accent, 0);
+    lv_obj_set_style_border_side(b, LV_BORDER_SIDE_LEFT, 0);
+    lv_obj_set_style_border_width(b, 7, 0);
+    lv_obj_remove_flag(b, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *ic = lv_label_create(b);
+    lv_obj_set_style_text_font(ic, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(ic, accent, 0);
+    lv_label_set_text(ic, sym);
+    lv_obj_align(ic, LV_ALIGN_LEFT_MID, 16, 0);
+
+    lv_obj_t *tx = lv_label_create(b);
+    lv_obj_set_style_text_font(tx, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(tx, lv_color_make(200, 200, 200), 0);
+    lv_label_set_text(tx, text);
+    lv_obj_align(tx, LV_ALIGN_CENTER, 6, 0);
+
+    lv_obj_t *cnt = lv_label_create(b);
+    lv_obj_set_style_text_font(cnt, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(cnt, lv_color_white(), 0);
+    lv_label_set_text(cnt, "0");
+    lv_obj_align(cnt, LV_ALIGN_RIGHT_MID, -16, 0);
+    return cnt;
+}
+
+/* Play screen: match scoreboard (top) + ring of 5 tappable outcome slices +
+ * opponent GOOD/BAD pair (bottom). Slices clockwise from top: Good hit, Out,
+ * Bad hit, Unforced error, Ace. Tap slice/opp = tag (PLAY only); tap a game
+ * circle = +1, hold 1s = −1; PWR = play/pause; BOOT = back. */
 static void create_play_screen(void)
 {
     scr_play = lv_obj_create(NULL);
     style_screen(scr_play);
 
-    /* 6 slices of 60°, clockwise from top. LVGL arc 0°=3 o'clock, CW.
-     * Slice 0 centered at top → bg from 240° spanning 60° each. */
-    const int   starts[PLAY_NUM_SLICES] = { 240, 300, 0, 60, 120, 180 };
-    const lv_color_t cols[PLAY_NUM_SLICES] = {
-        lv_color_make(29, 158, 85),    /* 1 Good hit       — green  */
-        lv_color_make(225, 200, 20),   /* 2 Out            — yellow */
-        lv_color_make(235, 120, 20),   /* 3 Bad hit        — orange */
-        lv_color_make(200, 45, 45),    /* 4 Unforced error — red    */
-        lv_color_make(45, 106, 216),   /* 5 First serve in — blue   */
-        lv_color_make(225, 225, 225) };/* 6 Lost point     — white  */
-    const char *icons[PLAY_NUM_SLICES] = {
-        LV_SYMBOL_OK, LV_SYMBOL_UP, LV_SYMBOL_WARNING,
-        LV_SYMBOL_CLOSE, LV_SYMBOL_PLAY, LV_SYMBOL_DOWN };
-    /* label offsets from screen center at each slice mid-angle (radius ~116) */
-    const int lx[PLAY_NUM_SLICES] = {   0, 100, 100,   0, -100, -100 };
-    const int ly[PLAY_NUM_SLICES] = { -116, -58,  58, 116,   58,  -58 };
-
-    /* Colored ring segments (lv_arc background arc = the slice) */
-    for (int i = 0; i < PLAY_NUM_SLICES; i++) {
-        lv_obj_t *a = lv_arc_create(scr_play);
-        lv_obj_set_size(a, PLAY_R_OUT * 2, PLAY_R_OUT * 2);
-        lv_obj_align(a, LV_ALIGN_CENTER, 0, 0);
-        lv_arc_set_rotation(a, 0);
-        lv_arc_set_bg_angles(a, starts[i], starts[i] + 60);
-        lv_arc_set_angles(a, starts[i], starts[i]);          /* no indicator */
-        lv_obj_set_style_arc_color(a, cols[i], LV_PART_MAIN);
-        lv_obj_set_style_arc_width(a, PLAY_R_OUT - PLAY_R_IN, LV_PART_MAIN);
-        lv_obj_set_style_arc_rounded(a, false, LV_PART_MAIN);  /* straight radial edges */
-        lv_obj_set_style_arc_opa(a, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_arc_opa(a, LV_OPA_TRANSP, LV_PART_INDICATOR);
-        lv_obj_set_style_bg_opa(a, LV_OPA_TRANSP, LV_PART_KNOB);
-        lv_obj_remove_flag(a, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_remove_flag(a, LV_OBJ_FLAG_SCROLLABLE);
-    }
-
-    /* Slice labels: icon (top) + large live count (below). White-band slice
-     * (Lost point) uses dark text for contrast. */
-    for (int i = 0; i < PLAY_NUM_SLICES; i++) {
-        lv_color_t fg = (i == 5) ? lv_color_make(30, 30, 30) : lv_color_white();
-
-        lv_obj_t *ic = lv_label_create(scr_play);
-        lv_obj_set_style_text_color(ic, fg, 0);
-        lv_obj_set_style_text_font(ic, &lv_font_montserrat_36, 0);
-        lv_label_set_text(ic, icons[i]);
-        lv_obj_align(ic, LV_ALIGN_CENTER, lx[i], ly[i] - 18);
-
-        lv_obj_t *cnt = lv_label_create(scr_play);
-        lv_obj_set_style_text_color(cnt, fg, 0);
-        lv_obj_set_style_text_font(cnt, &lv_font_montserrat_36, 0);
-        lv_obj_set_style_text_align(cnt, LV_TEXT_ALIGN_CENTER, 0);
-        lv_label_set_text(cnt, "0");
-        lv_obj_align(cnt, LV_ALIGN_CENTER, lx[i], ly[i] + 18);
-        play_lbl_slice[i] = cnt;     /* the count is what updates live */
-    }
-
-    /* Center dial */
-    lv_obj_t *circ = lv_obj_create(scr_play);
-    lv_obj_remove_style_all(circ);
-    lv_obj_set_size(circ, PLAY_R_IN * 2, PLAY_R_IN * 2);
-    lv_obj_align(circ, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_radius(circ, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(circ, lv_color_make(22, 22, 22), 0);
-    lv_obj_set_style_bg_opa(circ, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(circ, lv_color_make(70, 70, 70), 0);
-    lv_obj_set_style_border_width(circ, 2, 0);
-    lv_obj_remove_flag(circ, LV_OBJ_FLAG_SCROLLABLE);
-
-    play_lbl_state = lv_label_create(circ);
-    lv_obj_set_style_text_font(play_lbl_state, &lv_font_montserrat_32, 0);
-    lv_obj_set_style_text_color(play_lbl_state, lv_color_make(190, 190, 190), 0);
-    lv_label_set_text(play_lbl_state, "PAUSE");
-    lv_obj_center(play_lbl_state);
-
-    lv_obj_t *hint = lv_label_create(scr_play);
-    lv_obj_set_style_text_color(hint, lv_color_make(110, 110, 110), 0);
-    lv_obj_set_style_text_font(hint, &lv_font_montserrat_20, 0);
-    lv_label_set_text(hint, "BOOT = back    PWR = play/pause");
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -12);
-
-    /* Top info row: battery (left) · session hits (center) · clock (right),
-     * inset from the rounded corners */
+    /* Top info row: battery (left) · session hits (center) · clock (right) */
     play_lbl_bat = lv_label_create(scr_play);
     lv_obj_set_style_text_font(play_lbl_bat, &lv_font_montserrat_20, 0);
     set_battery_label(play_lbl_bat, -1);
-    lv_obj_align(play_lbl_bat, LV_ALIGN_TOP_LEFT, 45, 12);
+    lv_obj_align(play_lbl_bat, LV_ALIGN_TOP_LEFT, 45, 10);
 
     play_lbl_hits = lv_label_create(scr_play);
     lv_obj_set_style_text_color(play_lbl_hits, lv_color_make(0, 200, 255), 0);
@@ -1722,7 +1840,132 @@ static void create_play_screen(void)
     lv_obj_set_style_text_color(play_lbl_time, lv_color_make(190, 190, 190), 0);
     lv_obj_set_style_text_font(play_lbl_time, &lv_font_montserrat_20, 0);
     lv_label_set_text(play_lbl_time, "--:--");
-    lv_obj_align(play_lbl_time, LV_ALIGN_TOP_RIGHT, -45, 12);
+    lv_obj_align(play_lbl_time, LV_ALIGN_TOP_RIGHT, -45, 10);
+
+    /* ── Scoreboard: game circles (OPP left, YOU right) ── */
+    lv_obj_t *lo = lv_label_create(scr_play);
+    lv_obj_set_style_text_font(lo, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(lo, lv_color_make(200, 45, 45), 0);
+    lv_label_set_text(lo, "OPP");
+    lv_obj_set_pos(lo, PLAY_GC_OPP_X - 20, PLAY_GC_Y - 56);
+
+    lv_obj_t *ly_ = lv_label_create(scr_play);
+    lv_obj_set_style_text_font(ly_, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(ly_, lv_color_make(29, 158, 85), 0);
+    lv_label_set_text(ly_, "YOU");
+    lv_obj_set_pos(ly_, PLAY_GC_YOU_X - 22, PLAY_GC_Y - 56);
+
+    lv_obj_t *dash = lv_label_create(scr_play);
+    lv_obj_set_style_text_font(dash, &lv_font_montserrat_36, 0);
+    lv_obj_set_style_text_color(dash, lv_color_make(110, 110, 110), 0);
+    lv_label_set_text(dash, "-");
+    lv_obj_align(dash, LV_ALIGN_TOP_MID, 0, PLAY_GC_Y - 24);
+
+    play_lbl_g_opp = make_game_circle(PLAY_GC_OPP_X, PLAY_GC_Y, lv_color_make(200, 45, 45));
+    play_lbl_g_you = make_game_circle(PLAY_GC_YOU_X, PLAY_GC_Y, lv_color_make(29, 158, 85));
+
+    lv_obj_t *shint = lv_label_create(scr_play);
+    lv_obj_set_style_text_font(shint, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(shint, lv_color_make(110, 110, 110), 0);
+    lv_label_set_text(shint, "tap +1    hold 1s -1");
+    lv_obj_align(shint, LV_ALIGN_TOP_MID, 0, PLAY_GC_Y + 42);
+
+    /* ── 5-slice player ring (72° each), slice 0 centered at top ── */
+    const int starts[PLAY_NUM_SLICES] = { 234, 306,  18,  90, 162 };
+    const int ends[PLAY_NUM_SLICES]   = { 306,  18,  90, 162, 234 };
+    const lv_color_t cols[PLAY_NUM_SLICES] = {
+        lv_color_make(29, 158, 85),    /* Good hit       — green  */
+        lv_color_make(225, 200, 20),   /* Out            — yellow */
+        lv_color_make(235, 120, 20),   /* Bad hit        — orange */
+        lv_color_make(200, 45, 45),    /* Unforced error — red    */
+        lv_color_make(45, 106, 216) }; /* Ace            — blue   */
+    /* icon+count offsets from SCREEN center at each slice mid-angle (incl. the
+     * ring's +41 downward shift): top, upper-right, lower-right, lower-left, UL */
+    const int ox[PLAY_NUM_SLICES] = {  0,  82,  51, -51, -82 };
+    const int oy[PLAY_NUM_SLICES] = { -45, 14, 111, 111,  14 };
+
+    for (int i = 0; i < PLAY_NUM_SLICES; i++) {
+        lv_obj_t *a = lv_arc_create(scr_play);
+        lv_obj_set_size(a, PLAY_R_OUT * 2, PLAY_R_OUT * 2);
+        lv_obj_align(a, LV_ALIGN_CENTER, 0, PLAY_CY - 251);
+        lv_arc_set_rotation(a, 0);
+        lv_arc_set_bg_angles(a, starts[i], ends[i]);   /* end<start wraps 360 */
+        lv_arc_set_angles(a, starts[i], starts[i]);     /* no indicator */
+        lv_obj_set_style_arc_color(a, cols[i], LV_PART_MAIN);
+        lv_obj_set_style_arc_width(a, PLAY_R_OUT - PLAY_R_IN, LV_PART_MAIN);
+        lv_obj_set_style_arc_rounded(a, false, LV_PART_MAIN);
+        lv_obj_set_style_arc_opa(a, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_arc_opa(a, LV_OPA_TRANSP, LV_PART_INDICATOR);
+        lv_obj_set_style_bg_opa(a, LV_OPA_TRANSP, LV_PART_KNOB);
+        lv_obj_remove_flag(a, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(a, LV_OBJ_FLAG_SCROLLABLE);
+    }
+
+    for (int i = 0; i < PLAY_NUM_SLICES; i++) {
+        lv_obj_t *ic = lv_image_create(scr_play);
+        lv_image_set_src(ic, play_icons[i]);
+        lv_obj_align(ic, LV_ALIGN_CENTER, ox[i], oy[i] - 12);
+
+        lv_obj_t *cnt = lv_label_create(scr_play);
+        lv_obj_set_style_text_color(cnt, lv_color_white(), 0);
+        lv_obj_set_style_text_font(cnt, &lv_font_montserrat_28, 0);
+        lv_obj_set_style_text_align(cnt, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(cnt, "0");
+        lv_obj_align(cnt, LV_ALIGN_CENTER, ox[i], oy[i] + 22);
+        play_lbl_slice[i] = cnt;
+    }
+
+    /* Center dial */
+    lv_obj_t *circ = lv_obj_create(scr_play);
+    lv_obj_remove_style_all(circ);
+    lv_obj_set_size(circ, PLAY_R_IN * 2, PLAY_R_IN * 2);
+    lv_obj_align(circ, LV_ALIGN_CENTER, 0, PLAY_CY - 251);
+    lv_obj_set_style_radius(circ, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(circ, lv_color_make(22, 22, 22), 0);
+    lv_obj_set_style_bg_opa(circ, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(circ, lv_color_make(70, 70, 70), 0);
+    lv_obj_set_style_border_width(circ, 2, 0);
+    lv_obj_remove_flag(circ, LV_OBJ_FLAG_SCROLLABLE);
+
+    play_lbl_state = lv_label_create(circ);
+    lv_obj_set_style_text_font(play_lbl_state, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(play_lbl_state, lv_color_make(190, 190, 190), 0);
+    lv_label_set_text(play_lbl_state, "PAUSE");
+    lv_obj_center(play_lbl_state);
+
+    /* ── Opponent GOOD / BAD pair (separate labeled section) ── */
+    lv_obj_t *ocap = lv_label_create(scr_play);
+    lv_obj_set_style_text_font(ocap, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(ocap, lv_color_make(138, 138, 138), 0);
+    lv_label_set_text(ocap, "OPPONENT");
+    lv_obj_align(ocap, LV_ALIGN_TOP_MID, 0, PLAY_OPP_Y0 - 26);
+
+    play_lbl_opp_good = make_opp_btn(PLAY_OPP_GOOD_X0, PLAY_OPP_GOOD_X1,
+                                     LV_SYMBOL_OK, "GOOD", lv_color_make(29, 158, 85));
+    play_lbl_opp_bad  = make_opp_btn(PLAY_OPP_BAD_X0, PLAY_OPP_BAD_X1,
+                                     LV_SYMBOL_WARNING, "BAD", lv_color_make(235, 120, 20));
+
+    /* ── Set-over freeze overlay (hidden until the set ends) ── */
+    play_setover_ov = lv_obj_create(scr_play);
+    lv_obj_remove_style_all(play_setover_ov);
+    lv_obj_set_size(play_setover_ov, 410, 502);
+    lv_obj_align(play_setover_ov, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_color(play_setover_ov, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(play_setover_ov, LV_OPA_80, 0);
+    lv_obj_remove_flag(play_setover_ov, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(play_setover_ov, LV_OBJ_FLAG_HIDDEN);
+
+    play_lbl_setover = lv_label_create(play_setover_ov);
+    lv_obj_set_style_text_font(play_lbl_setover, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_color(play_lbl_setover, lv_color_white(), 0);
+    lv_label_set_text(play_lbl_setover, "SET 0-0");
+    lv_obj_align(play_lbl_setover, LV_ALIGN_CENTER, 0, -14);
+
+    lv_obj_t *sov_hint = lv_label_create(play_setover_ov);
+    lv_obj_set_style_text_font(sov_hint, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(sov_hint, lv_color_make(180, 180, 180), 0);
+    lv_label_set_text(sov_hint, "BOOT = save & exit");
+    lv_obj_align(sov_hint, LV_ALIGN_CENTER, 0, 40);
 }
 
 /*

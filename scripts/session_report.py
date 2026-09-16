@@ -62,9 +62,12 @@ def load_calib():
     p=os.path.join(os.path.dirname(os.path.abspath(__file__)),"calib.json")
     return json.load(open(p)) if os.path.isfile(p) else None
 
-# Points the wearer won vs lost (provisional mapping — adjust to your rules)
-OUTCOME_SIGN={'Good hit':+1,'First serve in':0,'Out':-1,'Bad hit':-1,
-              'Unforced error':-1,'Lost point':-1}
+# Points the wearer won vs lost (provisional mapping — adjust to your rules).
+# Includes both the current tag set (v0.8: Ace, Opponent good/bad) and the
+# legacy names (First serve in, Lost point) so old sessions still parse.
+OUTCOME_SIGN={'Good hit':+1,'Ace':+1,'Opponent bad':+1,
+              'Out':-1,'Bad hit':-1,'Unforced error':-1,'Opponent good':-1,
+              'First serve in':0,'Lost point':-1}
 
 # ── stroke extraction ─────────────────────────────────────────────────────
 def extract_strokes(t, g, a, om, hit):
@@ -250,8 +253,8 @@ def summarize(strokes, rallies, outcomes, events):
     if serves:
         msg = (f"{len(serves)} serves detected, averaging {statistics.median([s['kmh'] for s in serves]):.0f} km/h "
                f"(top {max(s['kmh'] for s in serves):.0f}).")
-        fsi = sum(1 for _, o in (events or []) if 'First serve' in o)
-        if fsi: msg += f" {fsi} first serves in ({100*fsi/len(serves):.0f}% of detected serves)."
+        aces = sum(1 for _, o in (events or []) if o == 'Ace')
+        if aces: msg += f" {aces} aces tagged."
         out.append(msg)
     if events:
         won = sum(1 for _, o in events if OUTCOME_SIGN.get(o, 0) > 0)
@@ -310,12 +313,14 @@ def render(meta, strokes, rallies, sep, outcomes, out_path,
         score_html=("<div class='sec'><h2>Points (from tagged events)</h2>"
             f"<div style='font-size:22px;font-weight:600'>{won} won · {lost} lost"
             f"<span style='font-size:13px;color:#999;font-weight:400'> of {len(events)} tagged</span></div>"
-            "<div class='note'>Provisional mapping (Good hit/First serve = won; Out/Bad/Unforced/Lost = lost) — adjust to your scoring rules.</div></div>")
+            "<div class='note'>Provisional mapping (Good hit/Ace/Opponent bad = won; Out/Bad/Unforced/Opponent good = lost) — adjust to your scoring rules.</div></div>")
 
     out_rows=""
     if outcomes:
         total=sum(v for v in outcomes.values() if isinstance(v,int))
-        for k in ["Good hit","Out","Bad hit","Unforced error","First serve in","Lost point","Total hits"]:
+        for k in ["Good hit","Out","Bad hit","Unforced error","Ace",
+                  "Opponent good","Opponent bad","Set games you","Set games opp",
+                  "First serve in","Lost point","Total hits"]:
             if k in outcomes:
                 out_rows+=f"<tr><td>{html.escape(k)}</td><td style='text-align:right'>{outcomes[k]}</td></tr>"
 
