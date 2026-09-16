@@ -49,6 +49,11 @@ static const char *TAG = "tennis_test";
 #define PWR_BTN_GPIO        GPIO_NUM_10  /* PWR button — Home → Config */
 #define AUDIO_PA_GPIO       GPIO_NUM_46  /* ES8311/NS4150B PA_CTRL: HIGH=on */
 
+/* Touch release debounce: the FT3168 drops a report or two mid-press, so a
+ * single tap can read npts 1→0→1. Require sustained zero this long before
+ * re-arming the press edge, so brief flicker can't double-count. */
+#define TOUCH_RELEASE_DEBOUNCE_MS  100
+
 /* Home screen-sleep: after timeout show only the clock, dimmed; touch wakes */
 #define HOME_SLEEP_TIMEOUT_MS  30000
 #define BRIGHT_FULL            80
@@ -1394,6 +1399,7 @@ static void handle_back(void)
 static void touch_poll_cb(lv_timer_t *timer)
 {
     static bool was_pressed = false;
+    static uint32_t touch_zero_since = 0;   /* ms of first zero-read of a release */
 
     /* Ignore all input while the display is frozen for a WiFi sync */
     if (g_display_freeze) return;
@@ -1425,6 +1431,8 @@ static void touch_poll_cb(lv_timer_t *timer)
     if (!touch_i2c_dev) return;
     int npts = 0, tx = 0, ty = 0;
     if (ft3168_read_touch(&npts, &tx, &ty) != ESP_OK) return;
+
+    if (npts > 0) touch_zero_since = 0;     /* touch present → cancel release timer */
 
     if (npts > 0 && !was_pressed) {
         was_pressed = true;
@@ -1515,8 +1523,13 @@ static void touch_poll_cb(lv_timer_t *timer)
             break;
         default: break;
         }
-    } else if (npts == 0) {
-        was_pressed = false;
+    } else if (npts == 0 && was_pressed) {
+        /* Re-arm only after a sustained release, so a mid-press npts=0 flicker
+         * (one or two dropped reports) does not read as a second tap. */
+        uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+        if (touch_zero_since == 0) touch_zero_since = now;   /* first zero-read */
+        else if (now - touch_zero_since >= TOUCH_RELEASE_DEBOUNCE_MS)
+            was_pressed = false;
     }
 }
 
