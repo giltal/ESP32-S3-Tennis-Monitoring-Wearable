@@ -21,7 +21,7 @@ Built with **ESP-IDF v5.5.2** + **LVGL 9**.
 
 - **Home** — battery, live clock, mode selection; AMOLED dim-to-clock screen-sleep.
 - **Test & Tune** — live hit detection with on-device ω/α threshold tuning and SD recording (HIT-capture or ALL modes).
-- **Play** — play/pause match logging with a 5-slice outcome ring (good hit, out, bad hit, unforced error, ace), an opponent GOOD/BAD pair, and a manual set scoreboard (game circles: tap +1, hold to −1) that auto-ends the set; per-session folder with hit log + outcome/score counts.
+- **Play** — play/pause match logging with a 5-slice outcome ring (good hit, out, bad hit, unforced error, ace), an opponent GOOD/BAD pair, and a manual set scoreboard (game circles: tap +1, hold to −1) that auto-ends the set; per-session folder with hit log and outcome/score counts.
 - **Config** — handedness, on-demand WiFi→NTP clock sync, live RTC date/time, firmware version.
 - **Power management** — IMU idled off the tuning screen, DFS, screen-sleep.
 
